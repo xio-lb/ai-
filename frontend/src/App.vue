@@ -17,6 +17,7 @@ import {
   Share2,
   SlidersHorizontal,
   Sparkles,
+  Trash2,
   X
 } from '@lucide/vue'
 import { apiUrl } from './api'
@@ -300,6 +301,7 @@ const routeModeColors: Record<string, string> = {
 }
 
 const historyList = ref<HistoryItem[]>([])
+const deletingHistoryId = ref<number | null>(null)
 const memoryDraft = ref<UserMemory>({
   preferences: [],
   visited_cities: [],
@@ -1585,6 +1587,24 @@ async function saveExpenses() {
     }, 3000)
   }
 }
+
+async function deleteHistoryItem(id: number) {
+  if (!window.confirm('确定删除这条历史行程吗？删除后无法恢复。')) return
+  deletingHistoryId.value = id
+  try {
+    const response = await fetch(apiUrl(`/api/history/${id}`), {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error(`删除失败：${response.status}`)
+    }
+    await loadHistory()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : '历史行程删除失败'
+  } finally {
+    deletingHistoryId.value = null
+  }
+}
 function exportMarkdown() {
   if (!plan.value) return
   syncActualExpensesToPlan()
@@ -1889,19 +1909,33 @@ async function adjustPlan() {
 
         <div v-if="historyList.length" class="history">
           <h3>历史行程</h3>
-          <button
+          <div
             v-for="item in historyList"
             :key="item.id"
-            type="button"
             class="history-item"
+            role="button"
+            tabindex="0"
             @click="loadPlanFromHistory(item.id)"
+            @keydown.enter="loadPlanFromHistory(item.id)"
           >
             <span class="history-main">
               <History :size="15" />
               <span>{{ item.destination }} {{ item.days }}日游 · {{ item.budget }}元</span>
             </span>
-            <small>{{ item.created_at }}</small>
-          </button>
+            <span class="history-meta">
+              <small>{{ item.created_at }}</small>
+              <button
+                type="button"
+                class="history-delete"
+                :disabled="deletingHistoryId === item.id"
+                :aria-label="`删除 ${item.destination} 历史行程`"
+                @click.stop="deleteHistoryItem(item.id)"
+              >
+                <LoaderCircle v-if="deletingHistoryId === item.id" class="spin" :size="13" />
+                <Trash2 v-else :size="13" />
+              </button>
+            </span>
+          </div>
         </div>
 
         <div class="memory-card">
@@ -3558,7 +3592,9 @@ input:focus {
 
 .history-item {
   display: grid;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   margin-bottom: 8px;
   padding: 10px 12px;
@@ -3592,6 +3628,39 @@ input:focus {
 
 .history-item small {
   color: #7c8a82;
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid rgba(29, 42, 38, 0.14);
+  border-radius: 6px;
+  background: rgba(197, 106, 71, 0.1);
+  color: #a84d38;
+  cursor: pointer;
+  flex: none;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.history-delete:hover:not(:disabled) {
+  background: rgba(197, 106, 71, 0.2);
+  border-color: rgba(197, 106, 71, 0.42);
+  color: #8f3f2d;
+}
+
+.history-delete:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 .memory-card {
@@ -4090,6 +4159,18 @@ input:focus-visible {
 .history-main,
 .history-item small {
   color: rgba(246, 239, 223, 0.78);
+}
+
+.info-panel .history-delete {
+  background: rgba(224, 164, 88, 0.12);
+  border-color: rgba(255, 245, 225, 0.2);
+  color: #f2c98f;
+}
+
+.info-panel .history-delete:hover:not(:disabled) {
+  background: rgba(224, 164, 88, 0.24);
+  border-color: rgba(224, 164, 88, 0.52);
+  color: #fff0d6;
 }
 
 .loading-board {
