@@ -200,7 +200,7 @@ interface UserMemory {
 }
 
 
-const destination = ref('成都')
+const destination = ref('')
 const days = ref(3)
 const budget = ref(3000)
 const preferences = ref<string[]>(['美食', '人文'])
@@ -1109,6 +1109,14 @@ function syncActiveVariant() {
 }
 
 function submitPlan() {
+  const target = destination.value.trim()
+  if (!target) {
+    error.value = '请先填写目的地'
+    generationFailed.value = false
+    return
+  }
+  destination.value = target
+  error.value = ''
   if (compareMode.value) {
     return generateVariants()
   }
@@ -1778,7 +1786,7 @@ async function adjustPlan() {
         <form class="fields" @submit.prevent="submitPlan">
           <label>
             目的地
-            <input v-model="destination" type="text" />
+            <input v-model="destination" type="text" placeholder="例如 成都" />
           </label>
 
           <div class="row">
