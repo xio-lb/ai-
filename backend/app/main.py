@@ -22,6 +22,7 @@ from app.schemas.trip import TripPlan, TripRequest
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.services.history_service import delete_plan, get_plan, init_db, list_plans, save_plan
+from app.services import chat_service
 from app.services.memory_service import (
     get_user_memory,
     merge_memory_into_request,
@@ -42,6 +43,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 init_db()
+chat_service.init_db()
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -287,17 +289,38 @@ def memory_update(req: MemoryUpdateRequest):
 
 class ChatRequest(BaseModel):
     messages: list[dict]
+    session_id: int | None = None
 
 
 @app.post("/api/chat")
 def chat(req: ChatRequest):
     result = chat_requirement(req.messages, memory=get_user_memory())
 
+    session_id = req.session_id
+    if session_id is None or chat_service.get_session(session_id) is None:
+        session_id = chat_service.create_session("新对话")
+
+    user_content = ""
+    for msg in reversed(req.messages):
+        if msg.get("role") == "user" and str(msg.get("content") or "").strip():
+            user_content = str(msg.get("content") or "").strip()
+            break
+    if user_content:
+        chat_service.append_message(session_id, "user", user_content)
+
+    reply = str(result.get("reply") or "").strip()
+    if reply:
+        chat_service.append_message(session_id, "assistant", reply)
+
     if result.get("ready"):
         data = result.get("trip_request") or {}
+        destination = str(data.get("destination") or "").strip()
+        days = int(data.get("days", 3) or 3)
+        title = f"{destination} {days}日游" if destination else "旅行规划"
+        chat_service.rename_session(session_id, title)
         result["trip_request"] = TripRequest(
-            destination=data.get("destination", ""),
-            days=int(data.get("days", 3)),
+            destination=destination,
+            days=days,
             budget=int(data.get("budget", 3000)),
             preferences=data.get("preferences", []),
             departure_city=data.get("departure_city", ""),
@@ -308,10 +331,32 @@ def chat(req: ChatRequest):
             companions=int(data.get("companions", 1) or 1),
         )
 
+    result["session_id"] = session_id
+    result["title"] = chat_service.get_session(session_id)["title"]
     return result
+
+
+@app.get("/api/chat/sessions")
+def chat_sessions():
+    return chat_service.list_sessions()
+
+
+@app.get("/api/chat/sessions/{session_id}")
+def chat_session_detail(session_id: int):
+    session = chat_service.get_session(session_id)
+    if session is None:
+        return JSONResponse(status_code=404, content={"detail": "会话不存在"})
+    session["messages"] = chat_service.get_messages(session_id)
+    return session
+
+
+@app.delete("/api/chat/sessions/{session_id}")
+def chat_session_delete(session_id: int):
+    if not chat_service.delete_session(session_id):
+        return JSONResponse(status_code=404, content={"detail": "会话不存在"})
+    return {"ok": True}
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"])
 async def not_found_route(path: str):
     return JSONResponse(status_code=404, content={"detail": "请求的接口不存在"})
-

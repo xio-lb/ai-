@@ -189,6 +189,14 @@ interface HistoryItem {
   created_at: string
 }
 
+interface ChatSession {
+  id: number
+  title: string
+  created_at: string
+  updated_at: string
+  message_count: number
+}
+
 interface UserMemory {
   preferences: string[]
   visited_cities: string[]
@@ -320,7 +328,21 @@ const messages = ref<Array<{ role: string; content: string }>>([])
 const chatInput = ref('')
 const chatSending = ref(false)
 const chatScrollEl = ref<HTMLElement | null>(null)
+const chatSessions = ref<ChatSession[]>([])
+const chatHistoryOpen = ref(false)
+const chatHistoryError = ref('')
+const activeChatSessionId = ref<number | null>(null)
 let revealObserver: IntersectionObserver | null = null
+
+const activeChatTitle = computed(() => {
+  const active = chatSessions.value.find((item) => item.id === activeChatSessionId.value)
+  return active?.title || '新对话'
+})
+
+const activeChatMessageCount = computed(() => {
+  const active = chatSessions.value.find((item) => item.id === activeChatSessionId.value)
+  return active?.message_count || 0
+})
 
 const progressSteps = [
   '需求解析中',
@@ -1406,14 +1428,20 @@ async function sendMessage() {
     const response = await fetch(apiUrl('/api/chat'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: messages.value })
+      body: JSON.stringify({ messages: messages.value, session_id: activeChatSessionId.value })
     })
     if (!response.ok) {
       throw new Error(`请求失败：${response.status}`)
     }
 
     const result = await response.json()
+    const sessionId = Number(result.session_id) || null
+    if (sessionId) {
+      activeChatSessionId.value = sessionId
+      localStorage.setItem('activeChatSessionId', String(sessionId))
+    }
     pushAssistant(result.reply)
+    await loadChatSessions()
 
     if (result.ready && result.trip_request) {
       const req = result.trip_request
@@ -1437,6 +1465,82 @@ async function sendMessage() {
   } finally {
     chatSending.value = false
   }
+}
+
+function resetToNewChat() {
+  messages.value = []
+  activeChatSessionId.value = null
+  chatHistoryOpen.value = false
+  localStorage.removeItem('activeChatSessionId')
+  pushAssistant('你好，我是你的旅行规划助手。你想去哪里玩？')
+}
+
+function startNewChat() {
+  if (messages.value.length > 1 && !window.confirm('开始新对话？当前会话会保留在历史中。')) return
+  resetToNewChat()
+}
+
+async function loadChatSessions() {
+  try {
+    const response = await fetch(apiUrl('/api/chat/sessions'))
+    if (!response.ok) {
+      throw new Error(`加载失败：${response.status}`)
+    }
+    chatSessions.value = await response.json()
+    chatHistoryError.value = ''
+  } catch (e) {
+    chatHistoryError.value = e instanceof Error ? e.message : '历史对话加载失败'
+  }
+}
+
+async function loadChatSession(id: number) {
+  try {
+    const response = await fetch(apiUrl(`/api/chat/sessions/${id}`))
+    if (!response.ok) {
+      throw new Error(`加载失败：${response.status}`)
+    }
+    const session = await response.json()
+    messages.value = session.messages || []
+    activeChatSessionId.value = Number(session.id) || null
+    if (activeChatSessionId.value) {
+      localStorage.setItem('activeChatSessionId', String(activeChatSessionId.value))
+    }
+    chatHistoryOpen.value = false
+    chatHistoryError.value = ''
+    chatOpen.value = true
+    scrollChatToEnd()
+  } catch (e) {
+    chatHistoryError.value = e instanceof Error ? e.message : '历史对话加载失败'
+  }
+}
+
+async function deleteChatSession(id: number) {
+  if (!window.confirm('确定删除这段历史对话吗？删除后无法恢复。')) return
+  try {
+    const response = await fetch(apiUrl(`/api/chat/sessions/${id}`), {
+      method: 'DELETE'
+    })
+    if (!response.ok) {
+      throw new Error(`删除失败：${response.status}`)
+    }
+    if (activeChatSessionId.value === id) {
+      resetToNewChat()
+    }
+    await loadChatSessions()
+  } catch (e) {
+    chatHistoryError.value = e instanceof Error ? e.message : '历史对话删除失败'
+  }
+}
+
+async function restoreActiveChat() {
+  const storedId = Number(localStorage.getItem('activeChatSessionId') || '0')
+  if (Number.isInteger(storedId) && storedId > 0) {
+    await loadChatSession(storedId)
+  }
+  if (!messages.value.length) {
+    pushAssistant('你好，我是你的旅行规划助手。你想去哪里玩？')
+  }
+  await loadChatSessions()
 }
 
 
@@ -1715,7 +1819,7 @@ async function changeTransport(mode: string) {
 }
 
 onMounted(() => {
-  pushAssistant('你好，我是你的旅行规划助手。你想去哪里玩？')
+  void restoreActiveChat()
   loadHistory()
   loadMemory()
   observeReveals()
@@ -2541,12 +2645,58 @@ async function adjustPlan() {
 
       <aside class="chat-panel glass-panel">
         <div class="chat-head">
-          <button type="button" class="drawer-close chat-close" @click="chatOpen = false" aria-label="关闭AI对话">
-            <X :size="16" />
-          </button>
-          <span class="eyebrow"><MessageCircle :size="15" /> 旅行管家</span>
-          <h2>AI 对话</h2>
+          <div class="chat-head-top">
+            <div>
+              <span class="eyebrow"><MessageCircle :size="15" /> 旅行管家</span>
+              <h2>AI 对话</h2>
+            </div>
+            <div class="chat-head-actions">
+              <button type="button" class="chat-new-btn" :disabled="chatSending" @click="startNewChat">
+                <Plus :size="15" /> 新对话
+              </button>
+              <button type="button" class="drawer-close chat-close" @click="chatOpen = false" aria-label="关闭AI对话">
+                <X :size="16" />
+              </button>
+            </div>
+          </div>
           <p>描述目的地、预算和偏好，AI 会补全信息并自动生成规划。</p>
+          <div class="chat-session-bar">
+            <button
+              type="button"
+              class="chat-history-toggle"
+              :class="{ open: chatHistoryOpen }"
+              @click="chatHistoryOpen = !chatHistoryOpen"
+            >
+              <History :size="15" />
+              <span>{{ activeChatTitle }}</span>
+              <small v-if="activeChatMessageCount">{{ activeChatMessageCount }} 条</small>
+            </button>
+          </div>
+          <div v-if="chatHistoryOpen" class="chat-history-list">
+            <p v-if="chatHistoryError" class="chat-history-error">{{ chatHistoryError }}</p>
+            <div
+              v-for="session in chatSessions"
+              :key="session.id"
+              class="chat-session-item"
+              :class="{ active: session.id === activeChatSessionId }"
+              role="button"
+              tabindex="0"
+              @click="loadChatSession(session.id)"
+              @keydown.enter="loadChatSession(session.id)"
+            >
+              <span class="chat-session-title">{{ session.title }}</span>
+              <small>{{ session.message_count }} 条 · {{ session.updated_at }}</small>
+              <button
+                type="button"
+                class="chat-session-delete"
+                :aria-label="`删除会话 ${session.title}`"
+                @click.stop="deleteChatSession(session.id)"
+              >
+                <Trash2 :size="13" />
+              </button>
+            </div>
+            <p v-if="!chatSessions.length && !chatHistoryError" class="chat-history-empty">还没有历史对话</p>
+          </div>
         </div>
         <div ref="chatScrollEl" class="chat-messages" aria-live="polite">
           <div
@@ -3771,6 +3921,170 @@ input:focus {
   line-height: 1.7;
 }
 
+.chat-head-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.chat-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chat-new-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid rgba(29, 42, 38, 0.16);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #2e3d38;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+.chat-new-btn:hover:not(:disabled) {
+  border-color: rgba(197, 106, 71, 0.42);
+  background: #ffffff;
+  transform: translateY(-1px);
+}
+
+.chat-new-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.chat-head-actions .chat-close {
+  position: static;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+}
+
+.chat-session-bar {
+  display: flex;
+}
+
+.chat-history-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 9px;
+  border: 1px solid rgba(29, 42, 38, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.55);
+  color: #2e3d38;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.chat-history-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-history-toggle small {
+  color: #7c8a82;
+  font-weight: 600;
+}
+
+.chat-history-toggle.open {
+  border-color: rgba(197, 106, 71, 0.4);
+  background: #ffffff;
+}
+
+.chat-history-list {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 4px;
+  margin: -2px -4px 0;
+}
+
+.chat-session-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 2px 8px;
+  padding: 8px 9px;
+  border: 1px solid rgba(29, 42, 38, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+  color: #1f2933;
+  cursor: pointer;
+  transition: border-color 0.18s ease, background 0.18s ease;
+}
+
+.chat-session-item:hover,
+.chat-session-item.active {
+  border-color: rgba(197, 106, 71, 0.42);
+  background: #ffffff;
+}
+
+.chat-session-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chat-session-item small {
+  color: #7c8a82;
+  font-size: 11px;
+}
+
+.chat-session-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(29, 42, 38, 0.14);
+  border-radius: 6px;
+  background: rgba(197, 106, 71, 0.1);
+  color: #a84d38;
+  cursor: pointer;
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.chat-session-delete:hover {
+  background: rgba(197, 106, 71, 0.2);
+  border-color: rgba(197, 106, 71, 0.42);
+  color: #8f3f2d;
+}
+
+.chat-history-error,
+.chat-history-empty {
+  margin: 2px 0;
+  color: #7c8a82;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.chat-history-error {
+  color: #a84d38;
+}
+
 .chat-messages {
   min-height: 320px;
   overflow-y: auto;
@@ -4499,6 +4813,76 @@ input:focus-visible {
 .chat-input button:hover:not(:disabled) {
   background: #f0b76a;
   color: #173a31;
+}
+
+.chat-head {
+  border-color: rgba(255, 245, 225, 0.14);
+}
+
+.chat-new-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 245, 225, 0.2);
+  color: #f6efdf;
+}
+
+.chat-new-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(224, 164, 88, 0.5);
+  color: #fffaf0;
+}
+
+.chat-history-toggle {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 245, 225, 0.18);
+  color: #f6efdf;
+}
+
+.chat-history-toggle small {
+  color: rgba(246, 239, 223, 0.62);
+}
+
+.chat-history-toggle.open {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(224, 164, 88, 0.52);
+  color: #fffaf0;
+}
+
+.chat-session-item {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 245, 225, 0.16);
+  color: #f6efdf;
+}
+
+.chat-session-item:hover,
+.chat-session-item.active {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(224, 164, 88, 0.5);
+  color: #fffaf0;
+}
+
+.chat-session-item small {
+  color: rgba(246, 239, 223, 0.62);
+}
+
+.chat-session-delete {
+  background: rgba(224, 164, 88, 0.12);
+  border-color: rgba(255, 245, 225, 0.2);
+  color: #f2c98f;
+}
+
+.chat-session-delete:hover {
+  background: rgba(224, 164, 88, 0.24);
+  border-color: rgba(224, 164, 88, 0.52);
+  color: #fff0d6;
+}
+
+.chat-history-error,
+.chat-history-empty {
+  color: rgba(246, 239, 223, 0.62);
+}
+
+.chat-history-error {
+  color: #f2a58a;
 }
 
 @media (max-width: 1360px) {

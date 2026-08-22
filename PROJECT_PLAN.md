@@ -70,6 +70,9 @@ AI 每次最多询问 1-2 个问题，优先补齐必填字段，再补齐推荐
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/api/chat` | 对话需求收集 |
+| GET | `/api/chat/sessions` | 历史对话列表 |
+| GET | `/api/chat/sessions/{id}` | 历史对话详情 |
+| DELETE | `/api/chat/sessions/{id}` | 删除历史对话 |
 | POST | `/api/trip/plan` | 生成行程 |
 | POST | `/api/trip/plan/stream` | SSE 流式生成 |
 | POST | `/api/trip/plan/adjust` | 多轮调整 |
