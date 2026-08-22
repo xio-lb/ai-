@@ -416,7 +416,7 @@ surrounding 路线不闭环 ──────> itinerary（feedback）
 
 | 类型 | 工具 | 内容 |
 | --- | --- | --- |
-| 后端单测 | pytest | 26 个用例：schemas / 缓存 / 历史 / 记忆 / 错误处理 / 质量校验 / 降级 |
+| 后端单测 | pytest | 30 个用例：schemas / 缓存 / 历史 / 记忆 / 聊天会话 / 错误处理 / 质量校验 / 降级 |
 | 前端冒烟 | Playwright | 1 个用例：主页核心控件可加载 |
 | 构建 | vue-tsc + vite | 类型检查 + 生产构建，约 4 秒 |
 | 质量校验 | quality_agent | 候选池、坐标、天数、景点数、路线闭环 |
@@ -478,7 +478,7 @@ docker compose up -d --build
 - 背景：行程生成依赖高德天气接口，接口异常时无超时、无兜底，SSE 一直停在“正在获取天气”。
 - 方案：天气节点失败降级、Open-Meteo 兜底、高德缓存、接口超时控制；进度事件可定位卡点。
 - 修改前：天气接口异常时该次生成 100% 卡死，用户只能刷新。
-- 修改后：天气失败自动降级，行程仍可生成；后端 26 个 pytest 全部通过，前端冒烟测试通过。
+- 修改后：天气失败自动降级，行程仍可生成；后端 30 个 pytest 全部通过，前端冒烟测试通过。
 
 ### 难点 2：路线不是闭环
 
@@ -492,7 +492,7 @@ docker compose up -d --build
 - 背景：后端根目录散落旧 `test_*.py`，与 `backend/tests/` 同名冲突，pytest 收集阶段直接报错。
 - 方案：整理成 `backend/tests` 包，增加 `__init__.py` 和 `conftest.py`，统一 pytest 配置。
 - 修改前：pytest 收集 1 error，无法运行。
-- 修改后：26 个用例全部通过。
+- 修改后：30 个用例全部通过。
 
 ### 难点 4：记账功能不完整
 
@@ -594,7 +594,7 @@ docker compose up -d --build
 
 ### 14.20 测试能证明什么？
 
-> 后端 26 个 pytest 覆盖 schema、缓存、历史、记忆、错误处理、质量校验、降级；前端 Playwright 验证主页核心控件。它们保证核心业务逻辑可以回归。当前缺 CI 和真实 API 集成测试，这是下一个工程项。
+> 后端 30 个 pytest 覆盖 schema、缓存、历史、记忆、聊天会话、错误处理、质量校验、降级；前端 Playwright 验证主页核心控件。它们保证核心业务逻辑可以回归。当前缺 CI 和真实 API 集成测试，这是下一个工程项。
 
 ### 14.21 PDF 导出是真实 PDF 吗？
 
@@ -668,7 +668,7 @@ docker compose up -d --build
 
 **A（行动）**：给天气 Agent 加 try/except 降级；主源高德失败切 Open-Meteo；加 SQLite 缓存和 30 分钟 TTL；SSE 增加节点事件，前端能显示“正在获取天气”并知道卡点；补测试锁定回归。
 
-**R（结果）**：天气接口失败不再阻塞行程；后端 26 个 pytest 通过；前端冒烟测试通过；部署后 `/health` 正常。
+**R（结果）**：天气接口失败不再阻塞行程；后端 30 个 pytest 通过；前端冒烟测试通过；部署后 `/health` 正常。
 
 **加分收尾**：这个经历让我明白，AI 系统的可靠性不取决于模型多聪明，而取决于每个外部依赖都有失败边界。
 
@@ -682,7 +682,7 @@ docker compose up -d --build
 
 ### 核心数字
 
-- 后端 pytest：26 passed
+- 后端 pytest：30 passed
 - 前端 Playwright：1 passed
 - 生产构建：约 4 秒
 - Agent 节点：9 个（analyze / attractions / foods / hotels / weather / itinerary / budget / quality / surrounding）
