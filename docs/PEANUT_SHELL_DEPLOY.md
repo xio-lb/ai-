@@ -138,7 +138,7 @@ http://xxxxx.vicp.net:端口
 | 现象 | 原因 | 处理 |
 | --- | --- | --- |
 | 公网地址打开 502 | 本地 5173 没启动或端口写错 | 先访问 `http://127.0.0.1:5173` 确认 |
-| 页面返回 `Blocked request` | Vite 不允许花生壳域名 | 当前配置已允许 `.oray.net` / `.vicp.net`，自定义域名需要补进 `allowedHosts` |
+| 页面返回 `Blocked request` | Vite 不允许花生壳域名 | 当前配置已允许 `.oray.net` / `.vicp.net` / `.vicp.fun`，自定义域名需要补进 `allowedHosts` |
 | 页面能开但接口 404 | 后端没启动或代理目标不对 | 检查 `127.0.0.1:8000/api/chat/sessions` |
 | 接口报错 Application not found | 访问到了已停用的 Railway 地址 | 改用花生壳公网地址 |
 | 生成行程卡住 | 本地后端没有加载 DeepSeek/高德变量 | 检查后端启动环境变量和日志 |
