@@ -163,6 +163,24 @@ cd backend
 
 完整说明见 `docs/OBSERVABILITY.md`。
 
+## 多用户与异步任务
+
+账号体系使用 PBKDF2 加盐哈希 + 可吊销的 HS256 JWT；行程、对话、记忆和任务全部带 `user_id`，跨用户访问统一返回 404。生成流程提供异步任务接口，提交后立即返回 `task_id`，支持进度订阅、取消、单用户并发限制和提交限流。
+
+```powershell
+# 注册并拿到 token
+curl -X POST http://127.0.0.1:8000/api/auth/register -H "Content-Type: application/json" -d "{\"email\":\"you@example.com\",\"password\":\"your-password\"}"
+
+# 异步提交（202，返回 task_id）
+curl -X POST http://127.0.0.1:8000/api/tasks/plan -H "Content-Type: application/json" -H "Authorization: Bearer <token>" -d "{\"request\":{\"destination\":\"成都\",\"days\":3,\"budget\":3000}}"
+
+# 查询任务状态与结果
+curl http://127.0.0.1:8000/api/tasks/<task_id> -H "Authorization: Bearer <token>"
+```
+
+默认 `REQUIRE_AUTH=false`，未登录请求落在公共演示账号，线上 Demo 打开即用；设为 `true` 后所有业务接口都要求登录。完整设计与 Redis 迁移路径见 `docs/MULTI_USER_TASKS.md`。
+
+
 ## 核心亮点
 
 1. **LLM 与真实数据结合**

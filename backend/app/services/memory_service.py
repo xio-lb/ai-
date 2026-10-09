@@ -4,9 +4,11 @@ import sqlite3
 from pathlib import Path
 
 from app.schemas.trip import TripPlan, TripRequest
+from app.services import auth_service
 
 DB_PATH = Path(os.getenv("HISTORY_DB_PATH", str(Path(__file__).resolve().parent.parent.parent / "trip_history.db")))
 
+LEGACY_USER_ID = auth_service.LEGACY_USER_ID
 _VALID_PACES = ("compact", "standard", "relaxed")
 _VALID_TRANSPORT = ("auto", "walking", "driving", "transit", "bicycling")
 
@@ -15,6 +17,10 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _column_names(conn: sqlite3.Connection, table: str) -> set[str]:
+    return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
 
 
 def _default_memory() -> dict:
@@ -34,20 +40,56 @@ def init_db() -> None:
     conn = _connect()
     try:
         with conn:
-            conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS user_memory (
-                    id INTEGER PRIMARY KEY CHECK (id = 1),
-                    preferences_json TEXT NOT NULL DEFAULT '[]',
-                    visited_cities_json TEXT NOT NULL DEFAULT '[]',
-                    dietary_notes TEXT NOT NULL DEFAULT '',
-                    pace TEXT NOT NULL DEFAULT '',
-                    transport_mode TEXT NOT NULL DEFAULT '',
-                    hotel_budget INTEGER NOT NULL DEFAULT 0,
-                    companions INTEGER NOT NULL DEFAULT 1,
-                    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            columns = _column_names(conn, "user_memory")
+            if not columns:
+                conn.execute(
+                    """
+                    CREATE TABLE user_memory (
+                        user_id INTEGER PRIMARY KEY,
+                        preferences_json TEXT NOT NULL DEFAULT '[]',
+                        visited_cities_json TEXT NOT NULL DEFAULT '[]',
+                        dietary_notes TEXT NOT NULL DEFAULT '',
+                        pace TEXT NOT NULL DEFAULT '',
+                        transport_mode TEXT NOT NULL DEFAULT '',
+                        hotel_budget INTEGER NOT NULL DEFAULT 0,
+                        companions INTEGER NOT NULL DEFAULT 1,
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+                    )
+                    """
                 )
-                """
+            elif "user_id" not in columns:
+                # Migrate the legacy single-row table (id CHECK (id = 1)) into a per-user table.
+                conn.execute("ALTER TABLE user_memory RENAME TO user_memory_legacy")
+                conn.execute(
+                    """
+                    CREATE TABLE user_memory (
+                        user_id INTEGER PRIMARY KEY,
+                        preferences_json TEXT NOT NULL DEFAULT '[]',
+                        visited_cities_json TEXT NOT NULL DEFAULT '[]',
+                        dietary_notes TEXT NOT NULL DEFAULT '',
+                        pace TEXT NOT NULL DEFAULT '',
+                        transport_mode TEXT NOT NULL DEFAULT '',
+                        hotel_budget INTEGER NOT NULL DEFAULT 0,
+                        companions INTEGER NOT NULL DEFAULT 1,
+                        updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO user_memory (
+                        user_id, preferences_json, visited_cities_json, dietary_notes,
+                        pace, transport_mode, hotel_budget, companions, updated_at
+                    )
+                    SELECT ?, preferences_json, visited_cities_json, dietary_notes,
+                           pace, transport_mode, hotel_budget, companions, updated_at
+                    FROM user_memory_legacy
+                    """,
+                    (LEGACY_USER_ID,),
+                )
+                conn.execute("DROP TABLE user_memory_legacy")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_user_memory_user ON user_memory(user_id)"
             )
     finally:
         conn.close()
@@ -62,11 +104,12 @@ def _clean_string_list(values: list | None) -> list[str]:
     return result
 
 
-def get_user_memory() -> dict:
+def get_user_memory(user_id: int = LEGACY_USER_ID) -> dict:
     conn = _connect()
     try:
         row = conn.execute(
-            "SELECT * FROM user_memory WHERE id = 1"
+            "SELECT * FROM user_memory WHERE user_id = ?",
+            (int(user_id),),
         ).fetchone()
     finally:
         conn.close()
@@ -86,7 +129,7 @@ def get_user_memory() -> dict:
     }
 
 
-def save_user_memory(memory: dict) -> dict:
+def save_user_memory(memory: dict, user_id: int = LEGACY_USER_ID) -> dict:
     normalized = _default_memory()
     normalized["preferences"] = _clean_string_list(memory.get("preferences"))
     normalized["visited_cities"] = _clean_string_list(memory.get("visited_cities"))
@@ -104,12 +147,13 @@ def save_user_memory(memory: dict) -> dict:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO user_memory (
-                    id, preferences_json, visited_cities_json, dietary_notes,
+                    user_id, preferences_json, visited_cities_json, dietary_notes,
                     pace, transport_mode, hotel_budget, companions, updated_at
                 )
-                VALUES (1, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now', 'localtime'))
                 """,
                 (
+                    int(user_id),
                     json.dumps(normalized["preferences"], ensure_ascii=False),
                     json.dumps(normalized["visited_cities"], ensure_ascii=False),
                     normalized["dietary_notes"],
@@ -122,7 +166,7 @@ def save_user_memory(memory: dict) -> dict:
     finally:
         conn.close()
 
-    return get_user_memory()
+    return get_user_memory(user_id)
 
 
 def _merge_plan_into(memory: dict, plan: TripPlan) -> None:
@@ -147,19 +191,31 @@ def _merge_plan_into(memory: dict, plan: TripPlan) -> None:
         memory["companions"] = plan.companions
 
 
-def update_memory_from_plan(plan: TripPlan) -> dict:
-    memory = get_user_memory()
+def update_memory_from_plan(plan: TripPlan, user_id: int = LEGACY_USER_ID) -> dict:
+    memory = get_user_memory(user_id)
     _merge_plan_into(memory, plan)
-    return save_user_memory(memory)
+    return save_user_memory(memory, user_id)
 
 
-def seed_memory_from_history() -> None:
+def seed_memory_from_history(user_id: int = LEGACY_USER_ID) -> None:
     conn = _connect()
     try:
-        existing = conn.execute("SELECT id FROM user_memory WHERE id = 1").fetchone()
+        existing = conn.execute(
+            "SELECT user_id FROM user_memory WHERE user_id = ?",
+            (int(user_id),),
+        ).fetchone()
         if existing is not None:
             return
-        rows = conn.execute("SELECT plan_json FROM trip_history").fetchall()
+        history_columns = _column_names(conn, "trip_history")
+        if not history_columns:
+            rows = []
+        elif "user_id" in history_columns:
+            rows = conn.execute(
+                "SELECT plan_json FROM trip_history WHERE user_id = ?",
+                (int(user_id),),
+            ).fetchall()
+        else:
+            rows = conn.execute("SELECT plan_json FROM trip_history").fetchall()
     finally:
         conn.close()
 
@@ -172,11 +228,11 @@ def seed_memory_from_history() -> None:
         _merge_plan_into(memory, plan)
 
     if memory["preferences"] or memory["visited_cities"]:
-        save_user_memory(memory)
+        save_user_memory(memory, user_id)
 
 
-def merge_memory_into_request(req: TripRequest) -> TripRequest:
-    memory = get_user_memory()
+def merge_memory_into_request(req: TripRequest, user_id: int = LEGACY_USER_ID) -> TripRequest:
+    memory = get_user_memory(user_id)
     preferences = _clean_string_list(req.preferences)
     for preference in memory["preferences"]:
         if preference not in preferences:

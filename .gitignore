@@ -22,3 +22,7 @@ dist/
 *.db
 
 .pytest_cache/
+
+# Runtime secrets and local logs
+jwt_secret.key
+logs/

@@ -3,7 +3,8 @@ import uuid
 from app.agents.adjust_agent import apply_precise_adjust
 from app.agents.graph import trip_graph
 from app.schemas.trip import TripPlan, TripRequest
-from app.services.memory_service import get_user_memory
+from app.services import memory_service
+from app.services.cancellation import reset_cancel_check, set_cancel_check
 from app.services.observability import trace_generation
 
 
@@ -12,23 +13,30 @@ def plan_trip(
     source: str = "api",
     request_id: str | None = None,
     variant_theme: str = "",
+    user_id: int = memory_service.LEGACY_USER_ID,
+    cancel_check=None,
 ) -> TripPlan:
-    with trace_generation(
-        source=source,
-        request=req,
-        request_id=request_id,
-        variant_theme=variant_theme,
-    ) as trace:
-        result = trip_graph.invoke({"request": req})
-        plan = result["plan"]
-        plan.user_preferences = list(req.preferences or [])
-        plan.departure_city = req.departure_city
-        plan.dietary_notes = req.dietary_notes
-        plan.hotel_budget = req.hotel_budget
-        plan.companions = req.companions
-        plan.user_memory = get_user_memory()
-        trace.attach_plan(plan)
-        return plan
+    cancel_token = set_cancel_check(cancel_check)
+    try:
+        with trace_generation(
+            source=source,
+            request=req,
+            request_id=request_id,
+            variant_theme=variant_theme,
+        ) as trace:
+            result = trip_graph.invoke({"request": req})
+            plan = result["plan"]
+            plan.user_preferences = list(req.preferences or [])
+            plan.departure_city = req.departure_city
+            plan.dietary_notes = req.dietary_notes
+            plan.hotel_budget = req.hotel_budget
+            plan.companions = req.companions
+            plan.user_memory = memory_service.get_user_memory(user_id)
+            object.__setattr__(plan, "_trace_id", trace.trace_id)
+            trace.attach_plan(plan)
+            return plan
+    finally:
+        reset_cancel_check(cancel_token)
 
 
 VARIANT_THEMES = [
@@ -99,7 +107,11 @@ def pick_variant_themes(req: TripRequest) -> list[dict]:
 
 
 def build_variant_plan(
-    req: TripRequest, theme: dict, request_id: str | None = None
+    req: TripRequest,
+    theme: dict,
+    request_id: str | None = None,
+    user_id: int = memory_service.LEGACY_USER_ID,
+    cancel_check=None,
 ) -> TripPlan:
     variant_preferences = list(req.preferences or [])
     variant_preferences.append(f"{theme['label']}：{theme['style']}")
@@ -115,6 +127,8 @@ def build_variant_plan(
         source="variant",
         request_id=request_id,
         variant_theme=theme["label"],
+        user_id=user_id,
+        cancel_check=cancel_check,
     )
     plan.variant_label = theme["label"]
     plan.variant_pace = theme["pace"]
@@ -122,15 +136,23 @@ def build_variant_plan(
     return plan
 
 
-def plan_variants(req: TripRequest) -> list[TripPlan]:
+def plan_variants(
+    req: TripRequest,
+    user_id: int = memory_service.LEGACY_USER_ID,
+    cancel_check=None,
+) -> list[TripPlan]:
     request_id = uuid.uuid4().hex
     return [
-        build_variant_plan(req, theme, request_id=request_id)
+        build_variant_plan(req, theme, request_id=request_id, user_id=user_id, cancel_check=cancel_check)
         for theme in pick_variant_themes(req)
     ]
 
 
-def adjust_trip(current_plan: TripPlan, user_message: str) -> TripPlan:
+def adjust_trip(
+    current_plan: TripPlan,
+    user_message: str,
+    user_id: int = memory_service.LEGACY_USER_ID,
+) -> TripPlan:
     precise = apply_precise_adjust(current_plan, user_message)
     if precise is not None:
         return precise
@@ -155,5 +177,7 @@ def adjust_trip(current_plan: TripPlan, user_message: str) -> TripPlan:
             }
         )
         plan = result["plan"]
+        plan.user_memory = memory_service.get_user_memory(user_id)
+        object.__setattr__(plan, "_trace_id", trace.trace_id)
         trace.attach_plan(plan)
         return plan

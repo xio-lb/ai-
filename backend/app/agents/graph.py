@@ -1,4 +1,4 @@
-﻿from typing import TypedDict
+from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -28,6 +28,7 @@ from app.services.observability import (
     record_retry,
     record_route,
 )
+from app.services.cancellation import raise_if_cancelled
 from app.services.progress import report_progress
 
 
@@ -48,6 +49,7 @@ class AgentState(TypedDict):
 
 
 def analyze_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在解析行程需求")
 
     return {
@@ -59,6 +61,7 @@ def analyze_node(state: AgentState) -> dict:
 
 
 def attraction_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在筛选景点")
 
     return {
@@ -71,6 +74,7 @@ def attraction_node(state: AgentState) -> dict:
 
 
 def food_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在筛选美食")
 
     return {
@@ -83,18 +87,21 @@ def food_node(state: AgentState) -> dict:
 
 
 def hotel_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在筛选酒店")
 
     return {"hotels": recommend_hotels(state["request"], count=6)}
 
 
 def weather_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在获取天气")
 
     return {"weather": fetch_weather(state["request"].destination, state["request"].travel_date)}
 
 
 def itinerary_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在编排每日行程")
 
     plan = generate_trip_plan(
@@ -111,6 +118,7 @@ def itinerary_node(state: AgentState) -> dict:
 
 
 def budget_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在核算预算")
 
     plan = state["plan"]
@@ -136,6 +144,7 @@ def budget_node(state: AgentState) -> dict:
 
 
 def quality_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在校验行程质量")
 
     plan = state["plan"]
@@ -161,6 +170,7 @@ def quality_node(state: AgentState) -> dict:
 
 
 def surrounding_node(state: AgentState) -> dict:
+    raise_if_cancelled()
     report_progress("正在补充周边与路线")
 
     plan = state["plan"]

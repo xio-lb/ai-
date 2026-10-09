@@ -20,7 +20,7 @@ import {
   Trash2,
   X
 } from '@lucide/vue'
-import { apiUrl } from './api'
+import { apiFetch, clearToken, getToken, setToken } from './api'
 import { toPng } from 'html-to-image'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 
@@ -258,6 +258,14 @@ const routeRecalculating = ref(false)
 const routeError = ref('')
 const infoOpen = ref(false)
 const chatOpen = ref(false)
+const authOpen = ref(false)
+const authMode = ref('login')
+const authEmail = ref('')
+const authPassword = ref('')
+const authName = ref('')
+const authBusy = ref(false)
+const authError = ref('')
+const currentUser = ref<{ id: number; email: string; display_name: string } | null>(null)
 const shareCardEl = ref<HTMLElement | null>(null)
 const hotelBudget = ref(0)
 const dietaryNotes = ref('')
@@ -1169,7 +1177,7 @@ async function generatePlan() {
   progress.value = ''
   progressStep.value = ''
   try {
-    const response = await fetch(apiUrl('/api/trip/plan/stream'), {
+    const response = await apiFetch('/api/trip/plan/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tripRequestBody())
@@ -1258,7 +1266,7 @@ async function generateVariants() {
   progress.value = ''
   progressStep.value = ''
   try {
-    const response = await fetch(apiUrl('/api/trip/plan/variants/stream'), {
+    const response = await apiFetch('/api/trip/plan/variants/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(tripRequestBody())
@@ -1425,7 +1433,7 @@ async function sendMessage() {
   scrollChatToEnd()
 
   try {
-    const response = await fetch(apiUrl('/api/chat'), {
+    const response = await apiFetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages: messages.value, session_id: activeChatSessionId.value })
@@ -1482,7 +1490,7 @@ function startNewChat() {
 
 async function loadChatSessions() {
   try {
-    const response = await fetch(apiUrl('/api/chat/sessions'))
+    const response = await apiFetch('/api/chat/sessions', {})
     if (!response.ok) {
       throw new Error(`加载失败：${response.status}`)
     }
@@ -1495,7 +1503,7 @@ async function loadChatSessions() {
 
 async function loadChatSession(id: number) {
   try {
-    const response = await fetch(apiUrl(`/api/chat/sessions/${id}`))
+    const response = await apiFetch(`/api/chat/sessions/${id}`, {})
     if (!response.ok) {
       throw new Error(`加载失败：${response.status}`)
     }
@@ -1517,7 +1525,7 @@ async function loadChatSession(id: number) {
 async function deleteChatSession(id: number) {
   if (!window.confirm('确定删除这段历史对话吗？删除后无法恢复。')) return
   try {
-    const response = await fetch(apiUrl(`/api/chat/sessions/${id}`), {
+    const response = await apiFetch(`/api/chat/sessions/${id}`, {
       method: 'DELETE'
     })
     if (!response.ok) {
@@ -1569,7 +1577,7 @@ function applyMemoryToForm(memory: UserMemory) {
 
 async function loadMemory() {
   try {
-    const response = await fetch(apiUrl('/api/memory'))
+    const response = await apiFetch('/api/memory', {})
     if (!response.ok) {
       throw new Error(`请求失败：${response.status}`)
     }
@@ -1585,7 +1593,7 @@ async function saveMemory() {
   memorySaving.value = true
   memoryMessage.value = ''
   try {
-    const response = await fetch(apiUrl('/api/memory'), {
+    const response = await apiFetch('/api/memory', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1644,7 +1652,7 @@ function removeVisitedCity(index: number) {
 
 async function loadHistory() {
   try {
-    const response = await fetch(apiUrl('/api/history'))
+    const response = await apiFetch('/api/history', {})
     if (!response.ok) {
       throw new Error(`请求失败：${response.status}`)
     }
@@ -1659,7 +1667,7 @@ async function saveCurrentPlan() {
   syncActualExpensesToPlan()
 
   try {
-    const response = await fetch(apiUrl('/api/history'), {
+    const response = await apiFetch('/api/history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan: plan.value })
@@ -1696,7 +1704,7 @@ async function deleteHistoryItem(id: number) {
   if (!window.confirm('确定删除这条历史行程吗？删除后无法恢复。')) return
   deletingHistoryId.value = id
   try {
-    const response = await fetch(apiUrl(`/api/history/${id}`), {
+    const response = await apiFetch(`/api/history/${id}`, {
       method: 'DELETE'
     })
     if (!response.ok) {
@@ -1767,7 +1775,7 @@ async function exportShareImage() {
 
 async function loadPlanFromHistory(id: number) {
   try {
-    const response = await fetch(apiUrl(`/api/history/${id}`))
+    const response = await apiFetch(`/api/history/${id}`, {})
     if (!response.ok) {
       throw new Error(`请求失败：${response.status}`)
     }
@@ -1797,7 +1805,7 @@ async function changeTransport(mode: string) {
   routeRecalculating.value = true
   routeError.value = ''
   try {
-    const response = await fetch(apiUrl('/api/trip/plan/routes'), {
+    const response = await apiFetch('/api/trip/plan/routes', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ plan: plan.value, transport_mode: mode })
@@ -1818,17 +1826,109 @@ async function changeTransport(mode: string) {
   }
 }
 
+function handleUnauthorized() {
+  currentUser.value = null
+}
+
+async function fetchCurrentUser() {
+  if (!getToken()) {
+    currentUser.value = null
+    return
+  }
+  try {
+    const response = await apiFetch('/api/auth/me', {})
+    if (!response.ok) {
+      currentUser.value = null
+      return
+    }
+    const data = await response.json()
+    currentUser.value = data.user
+  } catch {
+    currentUser.value = null
+  }
+}
+
+function openAccount() {
+  if (currentUser.value) {
+    if (window.confirm('要退出当前账号吗？退出后历史行程仍保留在账号下。')) {
+      void logout()
+    }
+    return
+  }
+  authMode.value = 'login'
+  authError.value = ''
+  authOpen.value = true
+}
+
+async function submitAuth() {
+  if (authBusy.value) return
+  const email = authEmail.value.trim()
+  if (!email || !authPassword.value) {
+    authError.value = '请填写邮箱和密码'
+    return
+  }
+  authBusy.value = true
+  authError.value = ''
+  try {
+    const path = authMode.value === 'login' ? '/api/auth/login' : '/api/auth/register'
+    const payload: Record<string, string> = { email, password: authPassword.value }
+    if (authMode.value === 'register') payload.display_name = authName.value.trim() || email.split('@')[0]
+    const response = await apiFetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(data.detail || '操作失败，请稍后重试')
+    }
+    setToken(data.token)
+    currentUser.value = data.user
+    authOpen.value = false
+    authPassword.value = ''
+    plan.value = null
+    planVariants.value = []
+    historyList.value = []
+    chatSessions.value = []
+    messages.value = []
+    await Promise.all([loadHistory(), loadMemory(), loadChatSessions()])
+  } catch (e) {
+    authError.value = e instanceof Error ? e.message : '操作失败，请稍后重试'
+  } finally {
+    authBusy.value = false
+  }
+}
+
+async function logout() {
+  try {
+    await apiFetch('/api/auth/logout', { method: 'POST' })
+  } catch {
+    /* the local token is cleared regardless of the network result */
+  }
+  clearToken()
+  currentUser.value = null
+  plan.value = null
+  planVariants.value = []
+  historyList.value = []
+  chatSessions.value = []
+  messages.value = []
+  await Promise.all([loadHistory(), loadMemory()])
+}
+
 onMounted(() => {
   void restoreActiveChat()
+  void fetchCurrentUser()
   loadHistory()
   loadMemory()
   observeReveals()
   window.addEventListener('scroll', handleHeroParallax, { passive: true })
+  window.addEventListener('atp:unauthorized', handleUnauthorized)
   heroImageTimer = window.setInterval(rotateHeroImage, 8000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleHeroParallax)
+  window.removeEventListener('atp:unauthorized', handleUnauthorized)
   revealObserver?.disconnect()
   if (heroImageTimer) window.clearInterval(heroImageTimer)
 })
@@ -1841,7 +1941,7 @@ async function adjustPlan() {
   adjusting.value = true
   adjustError.value = ''
   try {
-    const response = await fetch(apiUrl('/api/trip/plan/adjust'), {
+    const response = await apiFetch('/api/trip/plan/adjust', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -1892,6 +1992,10 @@ async function adjustPlan() {
         </button>
         <button type="button" class="tool-btn" :class="{ active: chatOpen }" @click="chatOpen = !chatOpen">
           <MessageCircle :size="16" /> AI 对话
+        </button>
+        <button type="button" class="tool-btn account-btn" :class="{ active: authOpen }" @click="openAccount">
+          <span class="account-dot">{{ currentUser ? currentUser.display_name.slice(0, 1).toUpperCase() : "" }}</span>
+          {{ currentUser ? currentUser.display_name : "登录" }}
         </button>
       </div>
     </header>
@@ -2728,6 +2832,44 @@ async function adjustPlan() {
     </section>
 
     <div v-if="infoOpen || chatOpen" class="drawer-backdrop" @click="infoOpen = false; chatOpen = false"></div>
+
+    <div v-if="authOpen" class="auth-backdrop" @click.self="authOpen = false">
+      <section class="auth-card" role="dialog" aria-modal="true" aria-label="账号">
+        <button type="button" class="auth-close" @click="authOpen = false" aria-label="关闭">
+          <X :size="16" />
+        </button>
+        <header class="auth-head">
+          <span class="eyebrow">Travel Journal · Member</span>
+          <h2>{{ authMode === 'login' ? '登录旅行账号' : '创建旅行账号' }}</h2>
+          <p>登录后，你的行程、记账与偏好会跟随账号保存。</p>
+        </header>
+        <div class="auth-tabs">
+          <button type="button" :class="{ active: authMode === 'login' }" @click="authMode = 'login'; authError = ''">登录</button>
+          <button type="button" :class="{ active: authMode === 'register' }" @click="authMode = 'register'; authError = ''">注册</button>
+        </div>
+        <form class="auth-form" @submit.prevent="submitAuth">
+          <label v-if="authMode === 'register'">
+            昵称
+            <input v-model="authName" type="text" autocomplete="nickname" placeholder="旅行者" />
+          </label>
+          <label>
+            邮箱
+            <input v-model="authEmail" type="email" autocomplete="email" placeholder="you@example.com" />
+          </label>
+          <label>
+            密码
+            <input v-model="authPassword" type="password" autocomplete="current-password" placeholder="至少 8 位" />
+          </label>
+          <p v-if="authError" class="auth-error">{{ authError }}</p>
+          <button type="submit" class="auth-submit" :disabled="authBusy">
+            <LoaderCircle v-if="authBusy" class="spin" :size="16" />
+            {{ authBusy ? '处理中' : (authMode === 'login' ? '登录' : '注册并登录') }}
+          </button>
+        </form>
+        <p class="auth-hint">不登录也可以继续使用；登录后可跨设备保留自己的行程数据。</p>
+      </section>
+    </div>
+
   </main>
 </template>
 
@@ -6179,4 +6321,159 @@ input:focus-visible {
   }
 }
 
+
+/* ---------- account & auth ---------- */
+.account-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(12, 26, 43, 0.55);
+  backdrop-filter: blur(8px);
+}
+
+.auth-card {
+  position: relative;
+  width: min(420px, 100%);
+  padding: 28px;
+  border-radius: 18px;
+  background: var(--paper, #fffdf7);
+  border: 1px solid rgba(21, 46, 71, 0.12);
+  box-shadow: 0 28px 70px rgba(9, 24, 42, 0.28);
+}
+
+.auth-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid rgba(21, 46, 71, 0.14);
+  background: transparent;
+  cursor: pointer;
+}
+
+.auth-head h2 {
+  margin: 6px 0 6px;
+  font-size: 22px;
+}
+
+.auth-head p,
+.auth-hint {
+  margin: 0;
+  color: var(--ink-soft, #5b6b7c);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin: 20px 0 16px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(21, 46, 71, 0.06);
+}
+
+.auth-tabs button {
+  padding: 9px 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.auth-tabs button.active {
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(15, 38, 60, 0.12);
+  font-weight: 600;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.auth-form input {
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(21, 46, 71, 0.16);
+  background: #fff;
+  font: inherit;
+}
+
+.auth-form input:focus {
+  outline: 2px solid rgba(31, 109, 168, 0.35);
+  outline-offset: 1px;
+}
+
+.auth-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 13px;
+}
+
+.auth-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 12px;
+  border: 0;
+  border-radius: 11px;
+  background: #17395c;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.auth-hint {
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .auth-card {
+    padding: 22px;
+  }
+}
 </style>

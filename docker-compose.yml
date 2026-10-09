@@ -9,6 +9,9 @@ services:
       HISTORY_DB_PATH: /data/trip_history.db
       AMAP_CACHE_DB_PATH: /data/amap_cache.db
       TRACE_DB_PATH: /data/observability.db
+      USER_DB_PATH: /data/auth.db
+      TASK_DB_PATH: /data/tasks.db
+      TASK_WORKER_COUNT: "2"
     volumes:
       - app_data:/data
     restart: unless-stopped

@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.main import app
 from app.services import chat_service, memory_service
+from tests.conftest import _auth_headers, _register
 
 
 def test_chat_session_service_crud(tmp_path, monkeypatch):
@@ -32,30 +33,36 @@ def test_chat_session_service_crud(tmp_path, monkeypatch):
 def test_chat_session_api(tmp_path, monkeypatch):
     monkeypatch.setattr(chat_service, "DB_PATH", tmp_path / "chat-api.db")
     chat_service.init_db()
-    session_id = chat_service.create_session("历史对话")
-    chat_service.append_message(session_id, "user", "想去重庆")
-    chat_service.append_message(session_id, "assistant", "预算大概多少？")
 
     with TestClient(app) as client:
-        sessions = client.get("/api/chat/sessions")
+        account = _register(client, "chat-owner@example.com")
+        headers = _auth_headers(account)
+        user_id = account["user"]["id"]
+
+        session_id = chat_service.create_session("历史对话", user_id)
+        chat_service.append_message(session_id, "user", "想去重庆", user_id)
+        chat_service.append_message(session_id, "assistant", "预算大概多少？", user_id)
+
+        sessions = client.get("/api/chat/sessions", headers=headers)
         assert sessions.status_code == 200
         assert sessions.json()[0]["message_count"] == 2
 
-        detail = client.get(f"/api/chat/sessions/{session_id}")
+        detail = client.get(f"/api/chat/sessions/{session_id}", headers=headers)
         assert detail.status_code == 200
         assert len(detail.json()["messages"]) == 2
 
-        deleted = client.delete(f"/api/chat/sessions/{session_id}")
+        deleted = client.delete(f"/api/chat/sessions/{session_id}", headers=headers)
         assert deleted.status_code == 200
         assert deleted.json()["ok"] is True
 
-        missing = client.get(f"/api/chat/sessions/{session_id}")
+        missing = client.get(f"/api/chat/sessions/{session_id}", headers=headers)
         assert missing.status_code == 404
 
 
 def test_chat_api_saves_session(tmp_path, monkeypatch):
-    monkeypatch.setattr(chat_service, "DB_PATH", tmp_path / "chat-save.db")
-    monkeypatch.setattr(memory_service, "DB_PATH", tmp_path / "chat-save.db")
+    db_path = tmp_path / "chat-save.db"
+    monkeypatch.setattr(chat_service, "DB_PATH", db_path)
+    monkeypatch.setattr(memory_service, "DB_PATH", db_path)
     memory_service.init_db()
     chat_service.init_db()
 
@@ -74,15 +81,18 @@ def test_chat_api_saves_session(tmp_path, monkeypatch):
     monkeypatch.setattr(main_module, "chat_requirement", fake_chat_requirement)
 
     with TestClient(app) as client:
+        account = _register(client, "chat-save@example.com")
+        headers = _auth_headers(account)
         response = client.post(
             "/api/chat",
+            headers=headers,
             json={"messages": [{"role": "user", "content": "我想去成都玩 3 天"}]},
         )
         assert response.status_code == 200
         data = response.json()
         assert data["title"] == "成都 3日游"
 
-        detail = client.get(f"/api/chat/sessions/{data['session_id']}")
+        detail = client.get(f"/api/chat/sessions/{data['session_id']}", headers=headers)
         assert detail.status_code == 200
         roles = [item["role"] for item in detail.json()["messages"]]
         assert roles == ["user", "assistant"]
