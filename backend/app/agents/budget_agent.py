@@ -275,7 +275,11 @@ def validate_budget(plan: TripPlan) -> BudgetReport:
 4. 不要给出单个景点、单顿饭或具体酒店的固定价格，只给类别区间和波动原因。
 """
 
-    data = chat_json(user_prompt, system_prompt=SYSTEM_PROMPT)
+    data = chat_json(
+        user_prompt,
+        system_prompt=SYSTEM_PROMPT,
+        prompt_name="budget_validate",
+    )
     report_data = {
         key: data.get(key)
         for key in ("budget", "total_cost", "within_budget", "savings", "suggestions")

@@ -8,6 +8,7 @@ services:
     environment:
       HISTORY_DB_PATH: /data/trip_history.db
       AMAP_CACHE_DB_PATH: /data/amap_cache.db
+      TRACE_DB_PATH: /data/observability.db
     volumes:
       - app_data:/data
     restart: unless-stopped

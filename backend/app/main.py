@@ -4,7 +4,7 @@ import threading
 
 from fastapi import FastAPI
 from fastapi import HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,7 +22,7 @@ from app.schemas.trip import TripPlan, TripRequest
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from app.services.history_service import delete_plan, get_plan, init_db, list_plans, save_plan
-from app.services import chat_service
+from app.services import chat_service, observability
 from app.services.memory_service import (
     get_user_memory,
     merge_memory_into_request,
@@ -31,6 +31,7 @@ from app.services.memory_service import (
 )
 from app.agents.chat_agent import chat_requirement
 from app.services.amap_client import build_route_legs
+from app.services.observability import trace_generation
 from app.services.progress import reset_progress_callback, set_progress_callback
 
 
@@ -44,6 +45,7 @@ app.add_middleware(
 )
 init_db()
 chat_service.init_db()
+observability.init_db()
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -92,6 +94,37 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/api/metrics/summary")
+def metrics_summary(days: int = 30):
+    return observability.summary(days=max(1, min(days, 365)))
+
+
+@app.get("/api/metrics/traces")
+def metrics_traces(days: int = 30, limit: int = 50, offset: int = 0):
+    traces = observability.list_traces(
+        days=max(1, min(days, 365)),
+        limit=max(1, min(limit, 200)),
+        offset=max(0, offset),
+    )
+    return {"items": traces, "count": len(traces)}
+
+
+@app.get("/api/metrics/traces/{trace_id}")
+def metrics_trace_detail(trace_id: str):
+    trace = observability.get_trace(trace_id)
+    if trace is None:
+        return JSONResponse(status_code=404, content={"detail": "trace not found"})
+    return trace
+
+
+@app.get("/metrics")
+def prometheus_metrics(days: int = 30):
+    return PlainTextResponse(
+        observability.prometheus_text(days=max(1, min(days, 365))),
+        media_type="text/plain; version=0.0.4",
+    )
+
+
 @app.post("/api/trip/plan")
 def plan_trip_endpoint(req: TripRequest):
     plan = plan_trip(merge_memory_into_request(req))
@@ -135,30 +168,35 @@ def _run_plan_stream(merged, events):
     def sink(message):
         events.put({"type": "progress", "message": message})
 
-    token = set_progress_callback(sink)
-    try:
-        for step in trip_graph.stream({"request": merged}, stream_mode="updates"):
-            for node_name, update in step.items():
-                events.put({"type": "node", "node": node_name})
-                if update.get("plan") is not None:
-                    final_plan = update["plan"]
+    with trace_generation(source="api_stream", request=merged) as trace:
+        token = set_progress_callback(sink)
+        try:
+            for step in trip_graph.stream({"request": merged}, stream_mode="updates"):
+                for node_name, update in step.items():
+                    events.put({"type": "node", "node": node_name})
+                    if update.get("plan") is not None:
+                        final_plan = update["plan"]
 
-        if final_plan is None:
-            events.put({"type": "error", "message": "行程生成失败：服务未返回行程"})
-        else:
-            final_plan.user_preferences = list(merged.preferences or [])
-            final_plan.departure_city = merged.departure_city
-            final_plan.dietary_notes = merged.dietary_notes
-            final_plan.hotel_budget = merged.hotel_budget
-            final_plan.companions = merged.companions
-            final_plan.user_memory = get_user_memory()
-            events.put({"type": "done", "plan": final_plan})
-    except Exception as exc:
-        print(f"行程生成失败: {exc}")
-        events.put({"type": "error", "message": _friendly_error(exc)})
-    finally:
-        reset_progress_callback(token)
-        events.put({"type": "exit"})
+            if final_plan is None:
+                message = "行程生成失败：服务未返回行程"
+                trace.finalize(status="failure", error=message)
+                events.put({"type": "error", "message": message})
+            else:
+                final_plan.user_preferences = list(merged.preferences or [])
+                final_plan.departure_city = merged.departure_city
+                final_plan.dietary_notes = merged.dietary_notes
+                final_plan.hotel_budget = merged.hotel_budget
+                final_plan.companions = merged.companions
+                final_plan.user_memory = get_user_memory()
+                trace.attach_plan(final_plan)
+                events.put({"type": "done", "plan": final_plan})
+        except Exception as exc:
+            print(f"行程生成失败: {exc}")
+            trace.finalize(status="failure", error=str(exc))
+            events.put({"type": "error", "message": _friendly_error(exc)})
+        finally:
+            reset_progress_callback(token)
+            events.put({"type": "exit"})
 
 
 def _run_variants_stream(merged, events):

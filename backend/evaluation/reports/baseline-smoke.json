@@ -1,0 +1,206 @@
+{
+  "tag": "baseline-smoke",
+  "generated_at": "2026-10-09T10:02:33+00:00",
+  "cases_total": 3,
+  "cases_run": 3,
+  "summary": {
+    "generated_at": "2026-10-09T10:02:33+00:00",
+    "window_days": 0,
+    "totals": {
+      "runs": 3,
+      "success": 3,
+      "failure": 0,
+      "unique_requests": 3
+    },
+    "rates": {
+      "success_rate": 1.0,
+      "quality_pass_rate": 1.0,
+      "route_closure_rate": 1.0,
+      "budget_compliance_rate": 1.0,
+      "invalid_poi_run_rate": 0.0,
+      "cache_hit_rate": 0.6095
+    },
+    "latency_ms": {
+      "avg": 24084.27,
+      "p50": 24854.42,
+      "p95": 24922.74,
+      "min": 22468.07,
+      "max": 24930.33
+    },
+    "tokens": {
+      "total": 28669,
+      "avg_per_run": 9556.33,
+      "avg_per_success": 9556.33
+    },
+    "cost": {
+      "currency": "CNY",
+      "total": 0.0,
+      "avg_per_run": 0.0,
+      "configured": false
+    },
+    "external": {
+      "amap_calls_total": 65,
+      "amap_calls_avg": 21.67,
+      "cache_hits": 103,
+      "cache_lookups": 169
+    },
+    "retries": {
+      "total": 0,
+      "avg_per_run": 0.0
+    },
+    "invalid_poi": {
+      "total": 0,
+      "per_run": 0.0,
+      "per_planned_spot": 0.0
+    },
+    "nodes": {
+      "analyze": {
+        "count": 3,
+        "avg_ms": 2887.78,
+        "p95_ms": 4472.28,
+        "max_ms": 4743.21
+      },
+      "attractions": {
+        "count": 3,
+        "avg_ms": 2822.89,
+        "p95_ms": 4646.02,
+        "max_ms": 4828.18
+      },
+      "budget": {
+        "count": 3,
+        "avg_ms": 2709.37,
+        "p95_ms": 2913.92,
+        "max_ms": 2939.0
+      },
+      "foods": {
+        "count": 3,
+        "avg_ms": 2212.5,
+        "p95_ms": 3505.84,
+        "max_ms": 3711.97
+      },
+      "hotels": {
+        "count": 3,
+        "avg_ms": 490.49,
+        "p95_ms": 1324.23,
+        "max_ms": 1471.36
+      },
+      "itinerary": {
+        "count": 3,
+        "avg_ms": 7483.55,
+        "p95_ms": 8163.43,
+        "max_ms": 8182.33
+      },
+      "quality": {
+        "count": 3,
+        "avg_ms": 0.22,
+        "p95_ms": 0.38,
+        "max_ms": 0.41
+      },
+      "surrounding": {
+        "count": 3,
+        "avg_ms": 7816.33,
+        "p95_ms": 8851.45,
+        "max_ms": 8939.9
+      },
+      "weather": {
+        "count": 3,
+        "avg_ms": 1229.18,
+        "p95_ms": 2356.15,
+        "max_ms": 2554.44
+      }
+    },
+    "top_errors": []
+  },
+  "results": [
+    {
+      "case_id": "chengdu-2d-food",
+      "destination": "成都",
+      "days": 2,
+      "budget": 1800,
+      "success": true,
+      "duration_ms": 24854.42,
+      "trace_id": "c20e3d860cc7442d8566adf3c25f9398",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 8781,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.5283,
+      "error": "",
+      "plan_summary": {
+        "destination": "成都",
+        "days": 2,
+        "budget": 1800,
+        "total_cost": 1750,
+        "spots": 6,
+        "foods": 4,
+        "hotels": 5,
+        "route_legs": 12,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    },
+    {
+      "case_id": "chengdu-3d-standard",
+      "destination": "成都",
+      "days": 3,
+      "budget": 3000,
+      "success": true,
+      "duration_ms": 22468.07,
+      "trace_id": "658e14eefeaa429a85991af07a9bcd32",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 10078,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.6429,
+      "error": "",
+      "plan_summary": {
+        "destination": "成都",
+        "days": 3,
+        "budget": 3000,
+        "total_cost": 2800,
+        "spots": 8,
+        "foods": 6,
+        "hotels": 5,
+        "route_legs": 17,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    },
+    {
+      "case_id": "chengdu-4d-relaxed",
+      "destination": "成都",
+      "days": 4,
+      "budget": 5000,
+      "success": true,
+      "duration_ms": 24930.33,
+      "trace_id": "2a8cdb0d5bf44ad78c020eaa289d3e63",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 9810,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.65,
+      "error": "",
+      "plan_summary": {
+        "destination": "成都",
+        "days": 4,
+        "budget": 5000,
+        "total_cost": 4800,
+        "spots": 8,
+        "foods": 4,
+        "hotels": 5,
+        "route_legs": 16,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    }
+  ]
+}

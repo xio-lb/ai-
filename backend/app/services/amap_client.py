@@ -26,6 +26,7 @@ from app.schemas.trip import (
 load_dotenv()
 
 from app.services import cache_service
+from app.services.observability import external_call, record_cache_event
 from app.services.progress import report_progress
 
 AMAP_KEY = os.getenv("AMAP_WEB_KEY")
@@ -68,6 +69,7 @@ SKIP_TYPE_HINTS = [
 
 def _city_center(city: str) -> tuple[float, float]:
     if city in _center_cache:
+        record_cache_event("memory:center", True, layer="memory")
         return _center_cache[city]
 
     cached = cache_service.get_cached("amap", f"center:{city}")
@@ -79,7 +81,8 @@ def _city_center(city: str) -> tuple[float, float]:
     params = {"key": AMAP_KEY, "address": city, "city": city}
     report_progress(f"正在定位 {city} 市中心…")
 
-    data = httpx.get(GEO_URL, params=params, timeout=15).json()
+    with external_call("amap", "geocode"):
+        data = httpx.get(GEO_URL, params=params, timeout=15).json()
     geocodes = data.get("geocodes") or []
     if not geocodes:
         raise RuntimeError(f"高德地图定位失败：{city}")
@@ -120,6 +123,7 @@ def _distance_meters(city: str, location: str) -> float:
 def _search_pois(city: str, keywords: str, types: str = "", limit: int = 5) -> list[dict]:
     cache_key = (city, keywords, types, limit)
     if cache_key in _poi_cache:
+        record_cache_event("memory:poi", True, layer="memory")
         return list(_poi_cache[cache_key])
 
     persistent_key = f"poi:{city}|{keywords}|{types}|{limit}"
@@ -144,8 +148,9 @@ def _search_pois(city: str, keywords: str, types: str = "", limit: int = 5) -> l
             if types:
                 params["types"] = types
 
-            response = httpx.get(AMAP_URL, params=params, timeout=15)
-            data = response.json()
+            with external_call("amap", "poi_search"):
+                response = httpx.get(AMAP_URL, params=params, timeout=15)
+                data = response.json()
 
             if data.get("status") == "1":
                 pois = data.get("pois", [])
@@ -481,23 +486,24 @@ _WMO_WEATHER = {
 
 def _open_meteo_forecast(city: str) -> list[WeatherForecast]:
     lng, lat = _city_center(city)
-    response = httpx.get(
-        "https://api.open-meteo.com/v1/forecast",
-        params={
-            "latitude": lat,
-            "longitude": lng,
-            "daily": (
-                "weather_code,temperature_2m_max,temperature_2m_min,"
-                "precipitation_probability_max,wind_speed_10m_max,"
-                "wind_direction_10m_dominant"
-            ),
-            "timezone": "auto",
-            "forecast_days": 7,
-        },
-        timeout=15,
-    )
-    response.raise_for_status()
-    data = response.json()
+    with external_call("open_meteo", "forecast"):
+        response = httpx.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat,
+                "longitude": lng,
+                "daily": (
+                    "weather_code,temperature_2m_max,temperature_2m_min,"
+                    "precipitation_probability_max,wind_speed_10m_max,"
+                    "wind_direction_10m_dominant"
+                ),
+                "timezone": "auto",
+                "forecast_days": 7,
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        data = response.json()
     daily = data.get("daily") or {}
     dates = daily.get("time") or []
     codes = daily.get("weather_code") or []
@@ -549,8 +555,9 @@ def _amap_forecast(city: str) -> list[WeatherForecast]:
         "city": city,
         "extensions": "all",
     }
-    response = httpx.get(WEATHER_URL, params=params, timeout=15)
-    data = response.json()
+    with external_call("amap", "weather_forecast"):
+        response = httpx.get(WEATHER_URL, params=params, timeout=15)
+        data = response.json()
     if data.get("status") != "1":
         return []
     forecasts_data = data.get("forecasts") or []
@@ -638,8 +645,9 @@ def get_weather(city: str, travel_date: str = "") -> WeatherInfo:
 
     report_progress(f"正在获取 {city} 今日天气…")
 
-    response = httpx.get(WEATHER_URL, params=params, timeout=15)
-    data = response.json()
+    with external_call("amap", "weather_live"):
+        response = httpx.get(WEATHER_URL, params=params, timeout=15)
+        data = response.json()
 
     if data.get("status") != "1":
         raise RuntimeError(f"高德地图天气查询失败：{data.get('info')}")
@@ -696,8 +704,9 @@ def _pick_route_mode(origin: str, destination: str, mode: str) -> str:
 
 def _amap_route_request(url: str, params: dict) -> dict:
     for attempt in range(3):
-        response = httpx.get(url, params=params, timeout=20)
-        data = response.json()
+        with external_call("amap", "route"):
+            response = httpx.get(url, params=params, timeout=20)
+            data = response.json()
         if data.get("status") == "1":
             return data
 
@@ -794,6 +803,7 @@ def get_route(origin: str, destination: str, mode: str = "auto", city: str = "")
     resolved_mode = _pick_route_mode(origin, destination, mode)
     cache_key = (origin, destination, resolved_mode, city)
     if cache_key in _route_cache:
+        record_cache_event("memory:route", True, layer="memory")
         return _route_cache[cache_key].model_copy(deep=True)
 
     persistent_key = f"route:{origin}|{destination}|{resolved_mode}|{city}"
@@ -940,8 +950,9 @@ def search_nearby_pois(
 
         report_progress("正在搜索酒店周边设施…")
 
-        response = httpx.get(AROUND_URL, params=params, timeout=15)
-        data = response.json()
+        with external_call("amap", "nearby_search"):
+            response = httpx.get(AROUND_URL, params=params, timeout=15)
+            data = response.json()
 
         if data.get("status") != "1":
             raise RuntimeError(f"高德地图周边搜索失败：{data.get('info')}")

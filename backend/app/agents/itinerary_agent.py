@@ -79,7 +79,11 @@ def generate_trip_plan(
 {feedback}
 """
 
-    data = chat_json(prompt, system_prompt=SYSTEM_PROMPT)
+    data = chat_json(
+        prompt,
+        system_prompt=SYSTEM_PROMPT,
+        prompt_name="itinerary_generate",
+    )
     data.pop("budget_report", None)
 
     plan = TripPlan.model_validate(data)

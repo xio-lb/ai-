@@ -45,4 +45,8 @@ def analyze_requirement(req: TripRequest, instruction: str | None = None) -> dic
 attraction_keywords 和 food_keywords 必须是该城市可能真实存在的具体名称，用于高德地图搜索。
 """
 
-    return chat_json(user_prompt, system_prompt=SYSTEM_PROMPT)
+    return chat_json(
+        user_prompt,
+        system_prompt=SYSTEM_PROMPT,
+        prompt_name="requirement_analyze",
+    )

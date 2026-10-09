@@ -1,0 +1,296 @@
+{
+  "tag": "baseline-6",
+  "generated_at": "2026-10-09T10:05:35+00:00",
+  "cases_total": 6,
+  "cases_run": 6,
+  "summary": {
+    "generated_at": "2026-10-09T10:05:35+00:00",
+    "window_days": 0,
+    "totals": {
+      "runs": 6,
+      "success": 6,
+      "failure": 0,
+      "unique_requests": 6
+    },
+    "rates": {
+      "success_rate": 1.0,
+      "quality_pass_rate": 1.0,
+      "route_closure_rate": 1.0,
+      "budget_compliance_rate": 1.0,
+      "invalid_poi_run_rate": 0.0,
+      "cache_hit_rate": 0.5504
+    },
+    "latency_ms": {
+      "avg": 27362.6,
+      "p50": 27253.56,
+      "p95": 34782.71,
+      "min": 18473.39,
+      "max": 36472.59
+    },
+    "tokens": {
+      "total": 62069,
+      "avg_per_run": 10344.83,
+      "avg_per_success": 10344.83
+    },
+    "cost": {
+      "currency": "CNY",
+      "total": 0.0,
+      "avg_per_run": 0.0,
+      "configured": false
+    },
+    "external": {
+      "amap_calls_total": 158,
+      "amap_calls_avg": 26.33,
+      "cache_hits": 191,
+      "cache_lookups": 347
+    },
+    "retries": {
+      "total": 0,
+      "avg_per_run": 0.0
+    },
+    "invalid_poi": {
+      "total": 0,
+      "per_run": 0.0,
+      "per_planned_spot": 0.0
+    },
+    "nodes": {
+      "analyze": {
+        "count": 6,
+        "avg_ms": 1712.09,
+        "p95_ms": 2037.05,
+        "max_ms": 2072.86
+      },
+      "attractions": {
+        "count": 6,
+        "avg_ms": 3770.83,
+        "p95_ms": 5141.37,
+        "max_ms": 5267.72
+      },
+      "budget": {
+        "count": 6,
+        "avg_ms": 2828.86,
+        "p95_ms": 3281.33,
+        "max_ms": 3391.18
+      },
+      "foods": {
+        "count": 6,
+        "avg_ms": 2678.72,
+        "p95_ms": 3899.61,
+        "max_ms": 4123.13
+      },
+      "hotels": {
+        "count": 6,
+        "avg_ms": 1668.46,
+        "p95_ms": 2067.77,
+        "max_ms": 2080.81
+      },
+      "itinerary": {
+        "count": 6,
+        "avg_ms": 8585.78,
+        "p95_ms": 11005.19,
+        "max_ms": 11688.15
+      },
+      "quality": {
+        "count": 6,
+        "avg_ms": 0.19,
+        "p95_ms": 0.37,
+        "max_ms": 0.43
+      },
+      "surrounding": {
+        "count": 6,
+        "avg_ms": 10168.75,
+        "p95_ms": 13140.0,
+        "max_ms": 13594.91
+      },
+      "weather": {
+        "count": 6,
+        "avg_ms": 2642.03,
+        "p95_ms": 5489.08,
+        "max_ms": 6502.12
+      }
+    },
+    "top_errors": []
+  },
+  "results": [
+    {
+      "case_id": "chengdu-3d-standard",
+      "destination": "成都",
+      "days": 3,
+      "budget": 3000,
+      "success": true,
+      "duration_ms": 18473.39,
+      "trace_id": "7c2bfeca7ffd4bbb827352ab36da028b",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 10556,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.8421,
+      "error": "",
+      "plan_summary": {
+        "destination": "成都",
+        "days": 3,
+        "budget": 3000,
+        "total_cost": 2800,
+        "spots": 9,
+        "foods": 6,
+        "hotels": 5,
+        "route_legs": 18,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    },
+    {
+      "case_id": "beijing-3d-culture",
+      "destination": "北京",
+      "days": 3,
+      "budget": 4500,
+      "success": true,
+      "duration_ms": 29713.09,
+      "trace_id": "42cb59d0690442cba23fd9e49bdf325d",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 10076,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.4815,
+      "error": "",
+      "plan_summary": {
+        "destination": "北京",
+        "days": 3,
+        "budget": 4500,
+        "total_cost": 4300,
+        "spots": 9,
+        "foods": 4,
+        "hotels": 6,
+        "route_legs": 16,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    },
+    {
+      "case_id": "shanghai-2d-city",
+      "destination": "上海",
+      "days": 2,
+      "budget": 2500,
+      "success": true,
+      "duration_ms": 25009.45,
+      "trace_id": "640870facb7d47398d6437b45008832e",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 8777,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.55,
+      "error": "",
+      "plan_summary": {
+        "destination": "上海",
+        "days": 2,
+        "budget": 2500,
+        "total_cost": 2400,
+        "spots": 8,
+        "foods": 3,
+        "hotels": 6,
+        "route_legs": 13,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    },
+    {
+      "case_id": "xian-3d-history",
+      "destination": "西安",
+      "days": 3,
+      "budget": 3200,
+      "success": true,
+      "duration_ms": 26835.25,
+      "trace_id": "5635d35f910e44318e8a5a134b1f9c4c",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 9455,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.4643,
+      "error": "",
+      "plan_summary": {
+        "destination": "西安",
+        "days": 3,
+        "budget": 3200,
+        "total_cost": 3000,
+        "spots": 8,
+        "foods": 7,
+        "hotels": 6,
+        "route_legs": 18,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    },
+    {
+      "case_id": "chongqing-3d-city",
+      "destination": "重庆",
+      "days": 3,
+      "budget": 3000,
+      "success": true,
+      "duration_ms": 36472.59,
+      "trace_id": "701e8dfa46f3410b8d4bceb7ed19f401",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 12755,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.4925,
+      "error": "",
+      "plan_summary": {
+        "destination": "重庆",
+        "days": 3,
+        "budget": 3000,
+        "total_cost": 2800,
+        "spots": 13,
+        "foods": 7,
+        "hotels": 3,
+        "route_legs": 23,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    },
+    {
+      "case_id": "sanya-4d-resort",
+      "destination": "三亚",
+      "days": 4,
+      "budget": 9000,
+      "success": true,
+      "duration_ms": 27671.86,
+      "trace_id": "64c90921a225425b85423cd7bb8106f5",
+      "quality_passed": true,
+      "route_closed": true,
+      "budget_compliant": true,
+      "llm_tokens": 10450,
+      "estimated_cost": 0.0,
+      "invalid_poi_count": 0,
+      "retry_count": 0,
+      "cache_hit_rate": 0.4717,
+      "error": "",
+      "plan_summary": {
+        "destination": "三亚",
+        "days": 4,
+        "budget": 9000,
+        "total_cost": 8800,
+        "spots": 9,
+        "foods": 4,
+        "hotels": 6,
+        "route_legs": 17,
+        "quality_issue_count": 0,
+        "quality_issues": []
+      }
+    }
+  ]
+}

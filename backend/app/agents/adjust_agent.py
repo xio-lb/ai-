@@ -67,7 +67,11 @@ def classify_adjust_intent(user_message: str, current_plan: TripPlan) -> dict:
 4. new_pace 只能是 compact / standard / relaxed。
 5. transport_mode 只能是 auto / walking / driving / transit / bicycling。
 """
-    data = chat_json(prompt, system_prompt=INTENT_SYSTEM_PROMPT)
+    data = chat_json(
+        prompt,
+        system_prompt=INTENT_SYSTEM_PROMPT,
+        prompt_name="adjust_intent",
+    )
     intent = str(data.get("intent") or "general")
     if intent not in ALLOWED_INTENTS:
         intent = "general"

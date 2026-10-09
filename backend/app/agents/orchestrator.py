@@ -1,19 +1,34 @@
+import uuid
+
 from app.agents.adjust_agent import apply_precise_adjust
 from app.agents.graph import trip_graph
 from app.schemas.trip import TripPlan, TripRequest
 from app.services.memory_service import get_user_memory
+from app.services.observability import trace_generation
 
 
-def plan_trip(req: TripRequest) -> TripPlan:
-    result = trip_graph.invoke({"request": req})
-    plan = result["plan"]
-    plan.user_preferences = list(req.preferences or [])
-    plan.departure_city = req.departure_city
-    plan.dietary_notes = req.dietary_notes
-    plan.hotel_budget = req.hotel_budget
-    plan.companions = req.companions
-    plan.user_memory = get_user_memory()
-    return plan
+def plan_trip(
+    req: TripRequest,
+    source: str = "api",
+    request_id: str | None = None,
+    variant_theme: str = "",
+) -> TripPlan:
+    with trace_generation(
+        source=source,
+        request=req,
+        request_id=request_id,
+        variant_theme=variant_theme,
+    ) as trace:
+        result = trip_graph.invoke({"request": req})
+        plan = result["plan"]
+        plan.user_preferences = list(req.preferences or [])
+        plan.departure_city = req.departure_city
+        plan.dietary_notes = req.dietary_notes
+        plan.hotel_budget = req.hotel_budget
+        plan.companions = req.companions
+        plan.user_memory = get_user_memory()
+        trace.attach_plan(plan)
+        return plan
 
 
 VARIANT_THEMES = [
@@ -83,7 +98,9 @@ def pick_variant_themes(req: TripRequest) -> list[dict]:
     return [_THEME_BY_ID[theme_id] for theme_id in theme_ids]
 
 
-def build_variant_plan(req: TripRequest, theme: dict) -> TripPlan:
+def build_variant_plan(
+    req: TripRequest, theme: dict, request_id: str | None = None
+) -> TripPlan:
     variant_preferences = list(req.preferences or [])
     variant_preferences.append(f"{theme['label']}：{theme['style']}")
     variant_req = req.model_copy(
@@ -93,7 +110,12 @@ def build_variant_plan(req: TripRequest, theme: dict) -> TripPlan:
             "preferences": variant_preferences,
         }
     )
-    plan = plan_trip(variant_req)
+    plan = plan_trip(
+        variant_req,
+        source="variant",
+        request_id=request_id,
+        variant_theme=theme["label"],
+    )
     plan.variant_label = theme["label"]
     plan.variant_pace = theme["pace"]
     plan.variant_theme = theme["label"]
@@ -101,7 +123,11 @@ def build_variant_plan(req: TripRequest, theme: dict) -> TripPlan:
 
 
 def plan_variants(req: TripRequest) -> list[TripPlan]:
-    return [build_variant_plan(req, theme) for theme in pick_variant_themes(req)]
+    request_id = uuid.uuid4().hex
+    return [
+        build_variant_plan(req, theme, request_id=request_id)
+        for theme in pick_variant_themes(req)
+    ]
 
 
 def adjust_trip(current_plan: TripPlan, user_message: str) -> TripPlan:
@@ -120,11 +146,14 @@ def adjust_trip(current_plan: TripPlan, user_message: str) -> TripPlan:
         transport_mode=current_plan.transport_mode or "auto",
     )
 
-    result = trip_graph.invoke(
-        {
-            "request": req,
-            "instruction": user_message,
-            "current_plan": current_plan,
-        }
-    )
-    return result["plan"]
+    with trace_generation(source="adjust", request=req) as trace:
+        result = trip_graph.invoke(
+            {
+                "request": req,
+                "instruction": user_message,
+                "current_plan": current_plan,
+            }
+        )
+        plan = result["plan"]
+        trace.attach_plan(plan)
+        return plan

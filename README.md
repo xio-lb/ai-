@@ -145,6 +145,24 @@ VITE_AMAP_SECURITY_CODE=你的高德安全密钥
 - [x] 预算超支自动重排
 - [x] 左侧对话 + 右侧行程一体化布局
 
+## 可观测性与评测
+
+每次行程生成都会记录 `trace_id`、LangGraph 节点耗时、LLM Token、外部 API 调用、缓存命中、质量/预算/路线结果和预估费用。
+
+```powershell
+# 指标汇总
+curl http://127.0.0.1:8000/api/metrics/summary
+
+# Prometheus 格式
+curl http://127.0.0.1:8000/metrics
+
+# 运行离线评测（默认串行，先跑 3 条冒烟）
+cd backend
+.\venv\Scripts\python.exe -m evaluation.run_eval --limit 3 --tag smoke-baseline
+```
+
+完整说明见 `docs/OBSERVABILITY.md`。
+
 ## 核心亮点
 
 1. **LLM 与真实数据结合**

@@ -53,4 +53,8 @@ def chat_requirement(messages: list[dict], memory: dict | None = None) -> dict:
 }}
 """
 
-    return chat_json(user_prompt, system_prompt=SYSTEM_PROMPT)
+    return chat_json(
+        user_prompt,
+        system_prompt=SYSTEM_PROMPT,
+        prompt_name="chat_requirement",
+    )

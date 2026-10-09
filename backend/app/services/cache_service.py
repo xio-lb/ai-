@@ -58,6 +58,15 @@ def _ensure_initialized() -> None:
         init_db()
 
 
+def _trace_cache(namespace: str, hit: bool) -> None:
+    try:
+        from app.services.observability import record_cache_event
+
+        record_cache_event(namespace, hit, layer="persistent")
+    except Exception:
+        return
+
+
 def get_cached(namespace: str, cache_key: str):
     _ensure_initialized()
     conn = _connect()
@@ -67,6 +76,7 @@ def get_cached(namespace: str, cache_key: str):
             (namespace, cache_key),
         ).fetchone()
         if row is None:
+            _trace_cache(namespace, False)
             return None
         if row["expires_at"] <= int(time.time()):
             with conn:
@@ -74,15 +84,19 @@ def get_cached(namespace: str, cache_key: str):
                     "DELETE FROM amap_cache WHERE namespace = ? AND cache_key = ?",
                     (namespace, cache_key),
                 )
+            _trace_cache(namespace, False)
             return None
         try:
-            return json.loads(row["payload"])
+            value = json.loads(row["payload"])
+            _trace_cache(namespace, True)
+            return value
         except (TypeError, ValueError):
             with conn:
                 conn.execute(
                     "DELETE FROM amap_cache WHERE namespace = ? AND cache_key = ?",
                     (namespace, cache_key),
                 )
+            _trace_cache(namespace, True)
             return None
     finally:
         conn.close()

@@ -21,6 +21,13 @@ from app.schemas.trip import (
     WeatherInfo,
 )
 from app.services.amap_client import build_route_legs, search_nearby_pois
+from app.services.observability import (
+    instrument_node,
+    record_budget,
+    record_quality,
+    record_retry,
+    record_route,
+)
 from app.services.progress import report_progress
 
 
@@ -109,9 +116,12 @@ def budget_node(state: AgentState) -> dict:
     plan = state["plan"]
     report = validate_budget(plan)
     plan.budget_report = report
+    record_budget(report)
     retry_count = state.get("retry_count", 0)
 
     if not report.within_budget and retry_count < 3:
+        reason = f"total_cost {plan.total_cost} exceeds budget {plan.budget}"
+        record_retry("budget", retry_count + 1, reason)
         return {
             "plan": plan,
             "feedback": f"当前 total_cost {plan.total_cost} 超过预算 {plan.budget}，请重新编排，确保 total_cost 不超过预算。",
@@ -136,9 +146,11 @@ def quality_node(state: AgentState) -> dict:
         state.get("hotels", []),
     )
     plan.quality_report = report
+    record_quality(report)
     retry_count = state.get("retry_count", 0)
 
     if not report["passed"] and retry_count < 3:
+        record_retry("quality", retry_count + 1, "；".join(report["issues"][:5]))
         return {
             "plan": plan,
             "feedback": "质量校验未通过：" + "；".join(report["issues"][:5]),
@@ -184,6 +196,7 @@ def surrounding_node(state: AgentState) -> dict:
     plan.transport_mode = state["request"].transport_mode
 
     route_issues = check_route_closure(plan, hotel)
+    record_route(route_issues)
     report = dict(plan.quality_report or {})
     existing_issues = list(report.get("issues", []))
     for issue in route_issues:
@@ -192,9 +205,11 @@ def surrounding_node(state: AgentState) -> dict:
     report["issues"] = existing_issues
     report["passed"] = not existing_issues
     plan.quality_report = report
+    record_quality(report)
 
     retry_count = state.get("retry_count", 0)
     if route_issues and retry_count < 3:
+        record_retry("route", retry_count + 1, "；".join(route_issues[:5]))
         return {
             "plan": plan,
             "feedback": "路线闭环校验未通过：" + "；".join(route_issues[:5]),
@@ -232,15 +247,15 @@ def route_after_surrounding(state: AgentState) -> str:
 
 workflow = StateGraph(AgentState)
 
-workflow.add_node("analyze", analyze_node)
-workflow.add_node("attractions", attraction_node)
-workflow.add_node("foods", food_node)
-workflow.add_node("hotels", hotel_node)
-workflow.add_node("weather", weather_node)
-workflow.add_node("itinerary", itinerary_node)
-workflow.add_node("budget", budget_node)
-workflow.add_node("quality", quality_node)
-workflow.add_node("surrounding", surrounding_node)
+workflow.add_node("analyze", instrument_node("analyze", analyze_node))
+workflow.add_node("attractions", instrument_node("attractions", attraction_node))
+workflow.add_node("foods", instrument_node("foods", food_node))
+workflow.add_node("hotels", instrument_node("hotels", hotel_node))
+workflow.add_node("weather", instrument_node("weather", weather_node))
+workflow.add_node("itinerary", instrument_node("itinerary", itinerary_node))
+workflow.add_node("budget", instrument_node("budget", budget_node))
+workflow.add_node("quality", instrument_node("quality", quality_node))
+workflow.add_node("surrounding", instrument_node("surrounding", surrounding_node))
 
 workflow.add_edge(START, "analyze")
 workflow.add_edge("analyze", "attractions")
