@@ -1,6 +1,7 @@
 import json
 import queue
 import threading
+import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated
 
@@ -302,7 +303,12 @@ def _run_plan_stream(merged, events, user_id: int = auth_service.LEGACY_USER_ID)
     with trace_generation(source="api_stream", request=merged) as trace:
         token = set_progress_callback(sink)
         try:
-            for step in trip_graph.stream({"request": merged}, stream_mode="updates"):
+            for step in trip_graph.stream(
+                {"request": merged},
+                config={"configurable": {"thread_id": uuid.uuid4().hex}},
+                durability="sync",
+                stream_mode="updates",
+            ):
                 for node_name, update in step.items():
                     events.put({"type": "node", "node": node_name})
                     if update.get("plan") is not None:

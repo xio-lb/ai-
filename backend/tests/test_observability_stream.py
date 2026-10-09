@@ -12,7 +12,7 @@ def test_stream_run_finalizes_trace(monkeypatch, tmp_path):
 
     plan = TripPlan(destination="成都", days=1, budget=1000, total_cost=800)
 
-    def fake_stream(state, stream_mode):
+    def fake_stream(state, config=None, durability="sync", stream_mode="updates"):
         yield {"analyze": {}}
         yield {"surrounding": {"plan": plan}}
 

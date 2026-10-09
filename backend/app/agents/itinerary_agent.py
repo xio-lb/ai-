@@ -1,4 +1,12 @@
-﻿from app.schemas.trip import AttractionCandidate, FoodCandidate, TripPlan, WeatherInfo
+import json
+
+from app.schemas.trip import (
+    AttractionCandidate,
+    DayPlan,
+    FoodCandidate,
+    TripPlan,
+    WeatherInfo,
+)
 from app.services.deepseek_client import chat_json
 from app.services.prompt_builder import build_itinerary_prompt
 from app.services.amap_client import build_booking_label, build_booking_url
@@ -36,6 +44,91 @@ def _fill_locations(
     return plan
 
 
+def repair_trip_days(
+    plan: TripPlan,
+    invalid_days: list[int],
+    attractions: list[AttractionCandidate],
+    foods: list[FoodCandidate],
+    issues: list[str] | None = None,
+    weather: WeatherInfo | None = None,
+    weather_policy: dict | None = None,
+) -> tuple[TripPlan, list[int]]:
+    """Regenerate only the flagged days and merge them back into the plan."""
+
+    targets = sorted({int(day) for day in invalid_days if 1 <= int(day) <= plan.days})
+    day_map = {day.day: day for day in plan.daily_plans}
+    targets = [day for day in targets if day in day_map]
+    if not targets:
+        return plan, []
+
+    target_payload = [day_map[day].model_dump() for day in targets]
+    issue_text = "\n".join(f"- {issue}" for issue in (issues or [])[:20]) or "- 未提供具体问题"
+    attraction_text = json.dumps(
+        [item.model_dump() for item in attractions], ensure_ascii=False, indent=2
+    )
+    food_text = json.dumps(
+        [item.model_dump() for item in foods], ensure_ascii=False, indent=2
+    )
+    prompt = f"""只修复下列问题天数，其他天数不要输出，也不要改动。
+
+目的地：{plan.destination}
+总天数：{plan.days}
+
+需要修复的天数与当前内容：
+{json.dumps(target_payload, ensure_ascii=False, indent=2)}
+
+质量校验发现的问题：
+{issue_text}
+
+候选景点（只能从中选择）：
+{attraction_text}
+
+候选美食（只能从中选择）：
+{food_text}
+
+必须遵守：
+1. 只输出 JSON 对象，格式为 {{"daily_plans": [修复后的天数]}}，不要输出解释。
+2. 只包含这些天数：{", ".join(str(day) for day in targets)}，day 字段保持不变。
+3. 每天至少 2 个景点、1 个餐厅，景点和餐厅必须来自候选清单。
+4. 每个 spot / food 必须复制候选清单中的 location，不要编造坐标。
+5. 修复时要保留原行程中合理的部分，只调整出错的地方。
+"""
+    if weather_policy:
+        prompt += f"""
+天气策略：{weather_policy.get('summary', '')}
+风险日：{weather_policy.get('risk_days', [])}
+雨天优先室内景点，并在 notes 中保留备选建议。
+"""
+    if weather and weather.forecasts:
+        forecast_text = "；".join(
+            f"第{index}天 {forecast.day_weather} 降水{forecast.precipitation_probability}%"
+            for index, forecast in enumerate(weather.forecasts[: plan.days], start=1)
+        )
+        prompt += f"\n参考预报：{forecast_text}\n"
+
+    data = chat_json(
+        prompt,
+        system_prompt=SYSTEM_PROMPT,
+        prompt_name="itinerary_repair_days",
+    )
+    repaired_days = [
+        DayPlan.model_validate(item) for item in (data.get("daily_plans") or [])
+    ]
+    if not repaired_days:
+        return plan, []
+
+    merged = TripPlan.model_validate(
+        plan.model_dump(exclude={"budget_report", "quality_report"})
+    )
+    replacements = {day.day: day for day in repaired_days if day.day in targets}
+    if not replacements:
+        return plan, []
+    merged.daily_plans = [replacements.get(day.day, day) for day in merged.daily_plans]
+    merged.budget_report = plan.budget_report
+    merged = _fill_locations(merged, attractions, foods)
+    return merged, sorted(replacements)
+
+
 def generate_trip_plan(
     requirement: dict,
     attractions: list[AttractionCandidate],
@@ -45,6 +138,7 @@ def generate_trip_plan(
     current_plan: TripPlan | None = None,
     pace: str = "standard",
     weather: WeatherInfo | None = None,
+    weather_policy: dict | None = None,
 ) -> TripPlan:
     prompt = build_itinerary_prompt(
         destination=requirement["destination"],
@@ -56,6 +150,7 @@ def generate_trip_plan(
         foods=foods,
         pace=pace,
         weather=weather,
+        weather_policy=weather_policy,
     )
 
     if instruction:

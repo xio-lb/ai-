@@ -157,6 +157,7 @@ class TripPlan(BaseModel):
     nearby: list[NearbyPoi] = []
     routes: dict[str, RouteInfo] = {}
     route_legs: list[RouteInfo] = []
+    route_optimization: list[dict[str, Any]] = []
     transport_mode: str = "auto"
 
 

@@ -80,18 +80,18 @@ def check_quality(
             if not spot.name:
                 issues.append(f"第{day.day}天存在空景点名称")
             elif candidate is None:
-                issues.append(f"景点不在候选清单：{spot.name}")
+                issues.append(f"第{day.day}天景点不在候选清单：{spot.name}")
             elif not _valid_location(spot.location):
-                issues.append(f"景点坐标不可用：{spot.name}")
+                issues.append(f"第{day.day}天景点坐标不可用：{spot.name}")
 
         for food in day.foods:
             candidate = _find_candidate(food.name, foods)
             if not food.name:
                 issues.append(f"第{day.day}天存在空餐厅名称")
             elif candidate is None:
-                issues.append(f"餐厅不在候选清单：{food.name}")
+                issues.append(f"第{day.day}天餐厅不在候选清单：{food.name}")
             elif not _valid_location(food.location):
-                issues.append(f"餐厅坐标不可用：{food.name}")
+                issues.append(f"第{day.day}天餐厅坐标不可用：{food.name}")
 
     for hotel in hotels or plan.hotels or []:
         if hotel and hotel.name and not _valid_location(hotel.location):

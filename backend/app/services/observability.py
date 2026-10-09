@@ -114,6 +114,8 @@ class TraceContext:
         self.route_issues: list[str] = []
         self.route_checked = False
         self.plan_summary: dict[str, Any] = {}
+        self.route_optimization: list[dict[str, Any]] = []
+        self.context_reuse: list[dict[str, Any]] = []
         self._lock = threading.Lock()
 
     def record_node(
@@ -220,6 +222,33 @@ class TraceContext:
             self.route_checked = True
             self.route_issues = list(issues or [])
 
+    def record_route_optimization(
+        self,
+        day: int,
+        distance_before_meters: float,
+        distance_after_meters: float,
+        changed: bool,
+    ) -> None:
+        before = float(distance_before_meters or 0)
+        after = float(distance_after_meters or 0)
+        with self._lock:
+            self.route_optimization.append(
+                {
+                    "day": _safe_int(day),
+                    "distance_before_meters": round(before, 1),
+                    "distance_after_meters": round(after, 1),
+                    "saved_meters": round(max(0.0, before - after), 1),
+                    "saved_ratio": round((before - after) / before, 4)
+                    if before > 0
+                    else 0.0,
+                    "changed": bool(changed),
+                }
+            )
+
+    def record_context_reuse(self, kind: str, hit: bool) -> None:
+        with self._lock:
+            self.context_reuse.append({"kind": kind, "hit": bool(hit)})
+
     def attach_plan(self, plan: TripPlan | None) -> None:
         if plan is None:
             return
@@ -284,6 +313,21 @@ class TraceContext:
             "cache_hit_rate": round(cache_hits / cache_lookups, 4)
             if cache_lookups
             else 0.0,
+            "context_reuse_hits": sum(
+                1 for item in self.context_reuse if item.get("hit")
+            ),
+            "context_reuse_lookups": len(self.context_reuse),
+            "context_reuse_hit_rate": round(
+                sum(1 for item in self.context_reuse if item.get("hit"))
+                / len(self.context_reuse),
+                4,
+            )
+            if self.context_reuse
+            else 0.0,
+            "route_saved_meters": round(
+                sum(float(item.get("saved_meters") or 0) for item in self.route_optimization),
+                1,
+            ),
             "retry_count": len(self.retries),
             "node_count": len(self.nodes),
         }
@@ -314,6 +358,8 @@ class TraceContext:
                 "route_issues": list(self.route_issues),
                 "route_checked": self.route_checked,
                 "plan_summary": dict(self.plan_summary),
+                "route_optimization": list(self.route_optimization),
+                "context_reuse": list(self.context_reuse),
             }
             data.update(self._derived())
             return data
@@ -399,6 +445,25 @@ def record_budget(report: Any) -> None:
 
 def record_route(issues: list[str] | None) -> None:
     _with_trace("record_route", issues)
+
+
+def record_route_optimization(
+    day: int,
+    distance_before_meters: float,
+    distance_after_meters: float,
+    changed: bool,
+) -> None:
+    _with_trace(
+        "record_route_optimization",
+        day,
+        distance_before_meters,
+        distance_after_meters,
+        changed,
+    )
+
+
+def record_context_reuse(kind: str, hit: bool) -> None:
+    _with_trace("record_context_reuse", kind, hit)
 
 
 @contextmanager

@@ -69,6 +69,7 @@ def build_itinerary_prompt(
     foods: list[FoodCandidate],
     pace: str = "standard",
     weather: WeatherInfo | None = None,
+    weather_policy: dict | None = None,
 ) -> str:
     preference_text = "、".join(preferences) if preferences else "无特别偏好"
     pace_text = {
@@ -124,12 +125,24 @@ def build_itinerary_prompt(
         lines = []
         for index, forecast in enumerate(weather.forecasts[: max(days, 7)], start=1):
             lines.append(
-                f"Day {index}: {forecast.date} {forecast.week} "
+                f"第{index}天: {forecast.date} {forecast.week} "
                 f"{forecast.day_weather}/{forecast.night_weather} "
                 f"{forecast.temp_min}-{forecast.temp_max}℃ "
                 f"降水{forecast.precipitation_probability}% {forecast.suggestion}"
             )
-        weather_text = "\n\n每日天气参考：\n" + "\n".join(lines) + "\n\n要求：雨天优先安排室内景点或把雨天备选建议写入 notes。"
+        weather_text = "\n\n每日天气参考：\n" + "\n".join(lines)
+
+    if weather_policy:
+        policy_lines = ["\n\n天气驱动编排策略：", f"- 总体：{weather_policy.get('summary', '')}"]
+        for item in weather_policy.get("day_guidance", [])[: max(days, 7)]:
+            policy_lines.append(
+                f"- 第{item.get('day')}天：{item.get('weather', '')} "
+                f"降水{item.get('precipitation_probability', 0)}% -> {item.get('planning', '')}"
+            )
+        for note in weather_policy.get("notes", []):
+            policy_lines.append(f"- {note}")
+        policy_lines.append("- 必须按上面的天气策略安排每天的室内/室外景点组合，并把备选建议写入 notes。")
+        weather_text += "\n".join(policy_lines)
     return f"""请根据候选景点和候选美食生成 JSON 格式的完整行程规划，只输出 JSON，不要输出任何其他文字。
 
 需求：

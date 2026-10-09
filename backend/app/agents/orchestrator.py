@@ -24,7 +24,15 @@ def plan_trip(
             request_id=request_id,
             variant_theme=variant_theme,
         ) as trace:
-            result = trip_graph.invoke({"request": req})
+            # trace request_id is shared by variants; each run still gets its own
+            # checkpoint thread so a repeated generation never resumes old state.
+            token_id = uuid.uuid4().hex
+            config = {"configurable": {"thread_id": f"{token_id}:{variant_theme or 'default'}"}}
+            result = trip_graph.invoke(
+                {"request": req},
+                config=config,
+                durability="sync",
+            )
             plan = result["plan"]
             plan.user_preferences = list(req.preferences or [])
             plan.departure_city = req.departure_city
@@ -174,7 +182,9 @@ def adjust_trip(
                 "request": req,
                 "instruction": user_message,
                 "current_plan": current_plan,
-            }
+            },
+            config={"configurable": {"thread_id": f"adjust:{uuid.uuid4().hex}"}},
+            durability="sync",
         )
         plan = result["plan"]
         plan.user_memory = memory_service.get_user_memory(user_id)

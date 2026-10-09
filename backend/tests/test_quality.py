@@ -71,4 +71,21 @@ def test_quality_node_retries():
     result = quality_node(state)
     assert result["retry_count"] == 1
     assert "质量校验未通过" in result["feedback"]
+    assert result["invalid_days"] == [1]
+    assert route_after_quality({**state, **result}) == "repair"
+
+
+def test_quality_routes_to_full_replan_without_day_scope():
+    plan = _plan([Spot(name="宽窄巷子", location="104.06,30.67")])
+    plan.days = 2
+    state = {
+        "plan": plan,
+        "attractions": [],
+        "foods": [],
+        "hotels": [],
+        "retry_count": 0,
+    }
+    result = quality_node(state)
+    assert "天数不匹配" in "；".join(result["plan"].quality_report["issues"])
+    assert result["invalid_days"] == []
     assert route_after_quality({**state, **result}) == "replan"
