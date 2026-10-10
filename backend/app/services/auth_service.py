@@ -17,6 +17,8 @@ import time
 import uuid
 from pathlib import Path
 
+from app.services import shared_cache
+
 DB_PATH = Path(os.getenv("USER_DB_PATH", str(Path(__file__).resolve().parent.parent.parent / "auth.db")))
 
 JWT_ALGORITHM = "HS256"
@@ -364,12 +366,21 @@ def delete_user(user_id: int) -> bool:
 
 
 def record_login_attempt(subject: str, succeeded: bool) -> None:
+    normalized = subject.strip().lower()[:254]
+    if succeeded:
+        shared_cache.reset_counter(f"rate:login_failure:{normalized}")
+    else:
+        shared_cache.hit(
+            f"rate:login_failure:{normalized}",
+            max(1, int(os.getenv("AUTH_LOGIN_MAX_ATTEMPTS", "10"))),
+            max(1, int(os.getenv("AUTH_LOGIN_WINDOW_SECONDS", "900"))),
+        )
     conn = _connect()
     try:
         with conn:
             conn.execute(
                 "INSERT INTO auth_login_attempts (subject, attempted_at, succeeded) VALUES (?, ?, ?)",
-                (subject.strip().lower()[:254], int(time.time()), 1 if succeeded else 0),
+                (normalized, int(time.time()), 1 if succeeded else 0),
             )
             # Keep the table small without a background job.
             conn.execute(
@@ -381,6 +392,7 @@ def record_login_attempt(subject: str, succeeded: bool) -> None:
 
 
 def login_failure_count(subject: str, window_seconds: int = 900) -> int:
+    normalized = subject.strip().lower()[:254]
     conn = _connect()
     try:
         row = conn.execute(
@@ -388,20 +400,24 @@ def login_failure_count(subject: str, window_seconds: int = 900) -> int:
             SELECT COUNT(*) AS c FROM auth_login_attempts
             WHERE subject = ? AND succeeded = 0 AND attempted_at >= ?
             """,
-            (subject.strip().lower()[:254], int(time.time()) - window_seconds),
+            (normalized, int(time.time()) - window_seconds),
         ).fetchone()
     finally:
         conn.close()
-    return int(row["c"] or 0)
+    database_count = int(row["c"] or 0)
+    shared_count = shared_cache.current_counter(f"rate:login_failure:{normalized}")
+    return max(database_count, shared_count)
 
 
 def clear_login_failures(subject: str) -> None:
+    normalized = subject.strip().lower()[:254]
+    shared_cache.reset_counter(f"rate:login_failure:{normalized}")
     conn = _connect()
     try:
         with conn:
             conn.execute(
                 "DELETE FROM auth_login_attempts WHERE subject = ? AND succeeded = 0",
-                (subject.strip().lower()[:254],),
+                (normalized,),
             )
     finally:
         conn.close()

@@ -1,7 +1,9 @@
 from types import SimpleNamespace
 
+import fakeredis
+
 from app.schemas.trip import RouteInfo
-from app.services import amap_client, cache_service
+from app.services import amap_client, cache_service, shared_cache
 
 
 def _temp_cache(monkeypatch, tmp_path):
@@ -17,6 +19,38 @@ def test_cache_round_trip_and_expiry(monkeypatch, tmp_path):
     assert cache_service.get_cached("test", "roundtrip") == {"a": 1, "b": [2, 3]}
     cache_service.set_cached("test", "expired", "value", ttl_seconds=0)
     assert cache_service.get_cached("test", "expired") is None
+
+
+def test_shared_cache_hit_skips_sqlite(monkeypatch, tmp_path):
+    _temp_cache(monkeypatch, tmp_path)
+    cache_service.set_cached("amap", "hot-layer", {"cached": "sqlite"}, ttl_seconds=3600)
+    shared_cache.use_client_for_tests(
+        fakeredis.FakeRedis(decode_responses=True)
+    )
+    shared_cache.set_json("cache:amap:hot-layer", {"cached": "redis"}, 3600)
+
+    def fail_connect():
+        raise AssertionError("shared cache should be checked before SQLite")
+
+    monkeypatch.setattr(cache_service, "_connect", fail_connect)
+    assert cache_service.get_cached("amap", "hot-layer") == {"cached": "redis"}
+
+
+def test_redis_miss_backfills_from_sqlite(monkeypatch, tmp_path):
+    shared_cache.use_client_for_tests(
+        fakeredis.FakeRedis(decode_responses=True)
+    )
+    _temp_cache(monkeypatch, tmp_path)
+    cache_service.set_cached("amap", "warm-layer", {"cached": True}, ttl_seconds=3600)
+    shared_cache.clear()
+
+    assert cache_service.get_cached("amap", "warm-layer") == {"cached": True}
+
+    def fail_connect():
+        raise AssertionError("backfilled Redis value should avoid SQLite")
+
+    monkeypatch.setattr(cache_service, "_connect", fail_connect)
+    assert cache_service.get_cached("amap", "warm-layer") == {"cached": True}
 
 
 def test_get_route_uses_persistent_cache(monkeypatch, tmp_path):

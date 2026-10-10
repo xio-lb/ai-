@@ -1,4 +1,16 @@
 services:
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -12,8 +24,13 @@ services:
       USER_DB_PATH: /data/auth.db
       TASK_DB_PATH: /data/tasks.db
       TASK_WORKER_COUNT: "2"
+      REDIS_URL: redis://redis:6379/0
+      REDIS_KEY_PREFIX: atp
     volumes:
       - app_data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -31,3 +48,4 @@ services:
 
 volumes:
   app_data:
+  redis_data:

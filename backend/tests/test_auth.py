@@ -40,6 +40,17 @@ def test_password_hash_is_salted_and_verifiable():
     assert not auth_service.verify_password("wrong-password", first)
 
 
+def test_login_failures_are_visible_in_shared_counter():
+    subject = "counter@example.com"
+    auth_service.clear_login_failures(subject)
+    auth_service.record_login_attempt(subject, succeeded=False)
+    auth_service.record_login_attempt(subject, succeeded=False)
+    assert auth_service.login_failure_count(subject, window_seconds=900) >= 2
+
+    auth_service.clear_login_failures(subject)
+    assert auth_service.login_failure_count(subject, window_seconds=900) == 0
+
+
 def test_token_tampering_is_rejected():
     with TestClient(app) as client:
         account = _register(client, "tamper@example.com")

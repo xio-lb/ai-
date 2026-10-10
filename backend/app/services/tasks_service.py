@@ -16,7 +16,7 @@ from pathlib import Path
 
 from app.agents.orchestrator import plan_trip
 from app.schemas.trip import TripPlan, TripRequest
-from app.services import memory_service
+from app.services import memory_service, shared_cache
 from app.services.cancellation import TaskCancelled
 from app.services.progress import reset_progress_callback, set_progress_callback
 
@@ -136,6 +136,18 @@ def create_task(user_id: int, req: TripRequest) -> dict:
 
 
 def submit_rate_limited(user_id: int) -> bool:
+    """Check the per-user submit quota.
+
+    Redis keeps one atomic counter per user, so the quota is shared by every
+    uvicorn worker instead of being enforced independently in each process.
+    The task table is still queried as an authoritative fallback: a worker
+    that restarted (and lost an in-memory counter) cannot bypass the quota.
+    """
+    exceeded, shared_count = shared_cache.hit(
+        f"rate:task_submit:{int(user_id)}",
+        SUBMIT_MAX_PER_WINDOW,
+        SUBMIT_WINDOW_SECONDS,
+    )
     conn = _connect()
     try:
         row = conn.execute(
@@ -147,7 +159,8 @@ def submit_rate_limited(user_id: int) -> bool:
         ).fetchone()
     finally:
         conn.close()
-    return int(row["c"] or 0) >= SUBMIT_MAX_PER_WINDOW
+    database_count = int(row["c"] or 0)
+    return exceeded or max(shared_count, database_count) > SUBMIT_MAX_PER_WINDOW
 
 
 def count_running(user_id: int) -> int:

@@ -106,3 +106,12 @@ def test_submit_rate_limit(monkeypatch):
         assert first.status_code == 202
         second = client.post("/api/tasks/plan", headers=headers, json=payload)
         assert second.status_code == 429
+
+
+def test_health_reports_cache_backend():
+    with TestClient(app) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "ok"
+        assert payload["cache"]["backend"] in {"redis", "memory"}

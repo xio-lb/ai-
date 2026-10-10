@@ -7,6 +7,8 @@ import threading
 import time
 from pathlib import Path
 
+from app.services import shared_cache
+
 DB_PATH = Path(os.getenv("AMAP_CACHE_DB_PATH", str(Path(__file__).resolve().parent.parent.parent / "amap_cache.db")))
 
 _init_lock = threading.Lock()
@@ -67,7 +69,16 @@ def _trace_cache(namespace: str, hit: bool) -> None:
         return
 
 
+def _shared_key(namespace: str, cache_key: str) -> str:
+    return f"cache:{namespace}:{cache_key}"
+
+
 def get_cached(namespace: str, cache_key: str):
+    shared_value = shared_cache.get_json(_shared_key(namespace, cache_key))
+    if shared_value is not None:
+        _trace_cache(namespace, True)
+        return shared_value
+
     _ensure_initialized()
     conn = _connect()
     try:
@@ -88,6 +99,8 @@ def get_cached(namespace: str, cache_key: str):
             return None
         try:
             value = json.loads(row["payload"])
+            ttl = max(1, int(row["expires_at"]) - int(time.time()))
+            shared_cache.set_json(_shared_key(namespace, cache_key), value, ttl)
             _trace_cache(namespace, True)
             return value
         except (TypeError, ValueError):
@@ -106,6 +119,11 @@ def set_cached(namespace: str, cache_key: str, value, ttl_seconds: int) -> None:
     _ensure_initialized()
     now = int(time.time())
     payload = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    ttl = max(0, int(ttl_seconds))
+    if ttl > 0:
+        shared_cache.set_json(_shared_key(namespace, cache_key), value, ttl)
+    else:
+        shared_cache.delete(_shared_key(namespace, cache_key))
     conn = _connect()
     try:
         with conn:
@@ -130,6 +148,10 @@ def set_cached(namespace: str, cache_key: str, value, ttl_seconds: int) -> None:
 
 def clear(namespace: str | None = None) -> int:
     _ensure_initialized()
+    if namespace is None:
+        shared_cache.delete_prefix("cache:")
+    else:
+        shared_cache.delete_prefix(f"cache:{namespace}:")
     conn = _connect()
     try:
         with conn:

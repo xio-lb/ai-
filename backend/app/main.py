@@ -21,7 +21,7 @@ from app.agents.orchestrator import (
     plan_variants,
 )
 from app.schemas.trip import TripPlan, TripRequest
-from app.services import auth_service, chat_service, observability, tasks_service
+from app.services import auth_service, chat_service, observability, shared_cache, tasks_service
 from app.services.amap_client import build_route_legs
 from app.services.history_service import delete_plan, get_plan, init_db, list_plans, save_plan
 from app.services.memory_service import (
@@ -220,7 +220,7 @@ def recalc_routes_endpoint(req: RouteRecalcRequest, user: CurrentUser):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    return {"status": "ok", "cache": shared_cache.health()}
 
 
 @app.get("/api/metrics/summary")
