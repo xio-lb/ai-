@@ -169,7 +169,7 @@
 
 **项目收尾 - 全量回归与发布复核**
 
-1. 后端 pytest 全量回归
-2. 前端 build + Playwright 全量回归
-3. Vercel / 花生壳生产环境复查
-4. 用户确认后推送 GitHub
+1. 后端 pytest 全量回归（已执行：全量连续 6 轮通过，另修复 LangGraph 执行器关闭竞态）
+2. 前端 build + Playwright 全量回归（已执行：build 通过，Playwright 11/11 通过，含 smoke 测试离线化）
+3. Vercel / 花生壳生产环境复查（本机 DNS 对 vercel.app 解析被污染、花生壳域名无公开记录，未能从当前网络确认，需换网络复核）
+4. 用户确认后推送 GitHub（待确认）
