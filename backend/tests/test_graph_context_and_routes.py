@@ -2,6 +2,7 @@ from app.agents import graph as graph_module
 from app.services import context_cache
 from app.schemas.trip import (
     AttractionCandidate,
+    BudgetReport,
     DayPlan,
     FoodCandidate,
     HotelCandidate,
@@ -76,6 +77,17 @@ def test_graph_reuses_context_and_optimizes_route(monkeypatch):
             total_cost=1500,
         )
 
+    def fake_budget(plan):
+        # Budget validation normally calls the LLM; keep this test offline and
+        # deterministic so CI never depends on a real DeepSeek key.
+        return BudgetReport(
+            budget=plan.budget,
+            total_cost=plan.total_cost,
+            within_budget=plan.total_cost <= plan.budget,
+            savings=plan.budget - plan.total_cost,
+            suggestions=[],
+        )
+
     def fake_nearby(location, types="", radius=0, limit=0):
         return []
 
@@ -105,6 +117,7 @@ def test_graph_reuses_context_and_optimizes_route(monkeypatch):
     monkeypatch.setattr(graph_module, "recommend_hotels", fake_hotels)
     monkeypatch.setattr(graph_module, "fetch_weather", fake_weather)
     monkeypatch.setattr(graph_module, "generate_trip_plan", fake_plan)
+    monkeypatch.setattr(graph_module, "validate_budget", fake_budget)
     monkeypatch.setattr(graph_module, "search_nearby_pois", fake_nearby)
     monkeypatch.setattr(graph_module, "build_route_legs", fake_legs)
 
