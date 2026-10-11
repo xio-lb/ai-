@@ -8,7 +8,8 @@
     "build": "vue-tsc -b && vite build",
     "lint": "vue-tsc --noEmit -p tsconfig.app.json",
     "preview": "vite preview",
-    "test:smoke": "playwright test"
+    "test:smoke": "playwright test",
+    "test:mobile": "playwright test tests/mobile.spec.ts"
   },
   "dependencies": {
     "@lucide/vue": "^1.31.0",

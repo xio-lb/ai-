@@ -3161,6 +3161,7 @@ input:focus {
 
 .canvas {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
   min-width: 0;
 }
@@ -3249,12 +3250,19 @@ input:focus {
 }
 
 .result {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   background: rgba(255, 253, 245, 0.96);
   border: 1px solid rgba(255, 250, 240, 0.8);
   border-radius: 8px;
   padding: 28px;
   box-shadow: 0 24px 60px rgba(16, 35, 31, 0.16);
   animation: riseIn 0.5s ease both;
+}
+
+.result > * {
+  min-width: 0;
 }
 
 .result-head {
@@ -5043,7 +5051,7 @@ input:focus-visible {
   }
 
   .dossier {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -5382,13 +5390,18 @@ input:focus-visible {
   }
 
   .dossier {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .info-panel,
   .chat-panel {
     top: 68px;
     bottom: 10px;
+    z-index: 100;
+  }
+
+  .drawer-backdrop {
+    z-index: 95;
   }
 }
 
@@ -5435,6 +5448,11 @@ input:focus-visible {
     bottom: 10px;
     width: auto;
     max-height: calc(100vh - 20px);
+    z-index: 100;
+  }
+
+  .drawer-backdrop {
+    z-index: 95;
   }
 
   .info-panel {
