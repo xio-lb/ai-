@@ -23,6 +23,10 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
+from app.services.langgraph_compat import install_shutdown_safe_executor
+
+install_shutdown_safe_executor()
+
 
 APP_CHECKPOINT_TYPES = [
     "app.schemas.trip.TripRequest",
