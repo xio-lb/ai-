@@ -1,5 +1,7 @@
 # AI 旅行规划助手
 
+[![CI](https://github.com/xio-lb/ai-/actions/workflows/ci.yml/badge.svg)](https://github.com/xio-lb/ai-/actions/workflows/ci.yml)
+
 一个基于 **LangGraph + FastAPI + DeepSeek + 高德地图 + Vue 3** 的多智能体旅行规划应用。用户输入目的地、天数、预算和偏好后，系统通过多个 Agent 协作生成包含真实 POI、每日行程、美食推荐和预算审核的完整旅行方案，并支持实时进度、多轮调整和历史保存。
 
 ## 技术栈
@@ -162,6 +164,15 @@ cd backend
 ```
 
 完整说明见 `docs/OBSERVABILITY.md`。
+
+## 持续集成
+
+推送到 `main` 和每个 Pull Request 都会触发 `.github/workflows/ci.yml`：
+
+- **后端测试**：Python 3.14 安装 `backend/requirements.txt` 后跑 `python -m pytest` 全量用例
+- **前端构建与端到端测试**：Node 22 依次执行 `npm ci`、类型检查、生产构建，再用 Playwright 在 375 / 390 / 768 / 1024 / 1440 五档视口跑 11 条用例
+- 端到端失败时自动上传 `test-results/` 附件，方便定位
+- 测试套件自带环境兜底（临时数据库 + 占位密钥），CI 不需要配置任何 Secret
 
 ## 多用户与异步任务
 

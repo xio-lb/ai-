@@ -1,4 +1,5 @@
 import itertools
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -9,6 +10,12 @@ import pytest
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
+
+# CI runs from a clean checkout with no .env file, and the DeepSeek client builds
+# the OpenAI SDK client at import time. Hand it a placeholder key: every test
+# stubs the network boundary itself.
+os.environ.setdefault("DEEPSEEK_API_KEY", "test-deepseek-key")
+os.environ.setdefault("AMAP_WEB_KEY", "test-amap-key")
 
 # Point every store at throwaway databases before app modules import them, so a
 # test run never reads or writes the developer's real data files.

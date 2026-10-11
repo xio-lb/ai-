@@ -133,7 +133,7 @@
 - [x] 把散落的 `test_*.py` 整理成 pytest 套件
 - [x] 覆盖 schemas / amap fallback / history
 - [x] 前端 Playwright 冒烟
-- [x] GitHub Actions：lint + test + build
+- [x] GitHub Actions（`.github/workflows/ci.yml`）：后端 pytest + 前端 lint / build / Playwright，失败自动上传 test-results
 
 ### 5.2 缓存与性能
 
